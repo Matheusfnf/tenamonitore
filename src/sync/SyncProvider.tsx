@@ -32,14 +32,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
   const syncNow = useCallback(async () => {
     if (!session || running.current) return;
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) {
-      setStatus('offline');
-      return;
-    }
+    // Reserva SÍNCRONA da trava: precisa vir antes de qualquer await, senão duas
+    // chamadas quase simultâneas (login + reconexão) passam o guard e o
+    // WatermelonDB aborta com "Concurrent synchronization is not allowed".
     running.current = true;
-    setStatus('syncing');
     try {
+      const net = await NetInfo.fetch();
+      if (!net.isConnected) {
+        setStatus('offline');
+        return;
+      }
+      setStatus('syncing');
       await runSync();
       setStatus('idle');
       setLastSyncedAt(Date.now());

@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { DatabaseProvider } from '@nozbe/watermelondb/react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
@@ -40,7 +41,14 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <PaperProvider theme={MD3LightTheme}>
+        <PaperProvider
+          theme={MD3LightTheme}
+          settings={{
+            icon: ({ name, color, size }) => (
+              <MaterialCommunityIcons name={name as any} color={color} size={size} />
+            ),
+          }}
+        >
           <DatabaseProvider database={database}>
             <AuthProvider>
               <SyncProvider>

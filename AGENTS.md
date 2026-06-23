@@ -19,10 +19,17 @@ WatermelonDB (SQLite/JSI) + Supabase (Postgres/Auth/Storage/RLS) + MapLibre RN.
 
 ## Gotchas importantes
 - **Dev client obrigatório** (não roda no Expo Go): WatermelonDB + MapLibre são nativos.
-- **Babel:** models WatermelonDB NÃO podem usar `!` (definite assignment) nos fields — o
-  `@babel/plugin-transform-typescript` quebra com decorators. Usar fields sem `!` +
-  `strictPropertyInitialization: false` (tsconfig) + `assumptions.setPublicClassFields`
-  (babel.config.js). Ver histórico se reaparecer "Definitely assigned fields...".
+- **Babel (SDK 56 / hermes-v1) — CRÍTICO:** o perfil `hermes-v1` do `babel-preset-expo`
+  (SDK 56+) NÃO transforma class-properties (Hermes faz nativo), mas os decorators legados do
+  WatermelonDB EXIGEM esse transform — senão dá runtime `Decorating class property failed`.
+  Forçar class-properties global quebra o React Native (`Cannot assign to read-only NONE`).
+  Solução em `babel.config.js`: `['babel-preset-expo', { decorators: false }]` + um PRESET
+  LOCAL que aplica `@babel/plugin-proposal-decorators` (legacy) e
+  `@babel/plugin-transform-class-properties` (loose) via `overrides` SÓ em `src/db/models/`.
+  (Override no TOPO do config quebra o cache key do Expo — `loadPartialConfigSync` sem filename —
+  por isso vai DENTRO de um preset.) Models não usam `!` + `strictPropertyInitialization:false`.
+  Validar sem device: `@babel/core` `loadPartialConfigSync` (cache key) + `transformFileSync`
+  (checar que o campo usa `_initializerDefineProperty`, não `_initializerWarningHelper`).
 - **Validação local:** `npx tsc --noEmit` e `npx expo export --platform android` (bundle
   Metro) pegam erros de import/babel sem precisar de device.
 - **Usuários:** papel/org vêm do `user_metadata` do Supabase Auth (trigger handle_new_user

@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { Appbar, Card, FAB, Text } from 'react-native-paper';
 
@@ -37,13 +37,22 @@ export default function FarmsListScreen() {
             .filter(Boolean)
             .join(' - ');
           return (
-            <Card mode="contained" style={styles.card}>
+            <Card
+              mode="contained"
+              style={styles.card}
+              onPress={() => router.push(`/farms/${item.id}` as Href)}
+            >
               <Card.Title
                 title={item.name}
                 subtitle={
                   [item.ownerName, location].filter(Boolean).join(' · ') ||
                   undefined
                 }
+                right={(props) => (
+                  <Text {...props} style={styles.chevron}>
+                    ›
+                  </Text>
+                )}
               />
             </Card>
           );
@@ -65,6 +74,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   list: { padding: 16, gap: 12 },
   card: { borderRadius: 12 },
+  chevron: { fontSize: 28, opacity: 0.4, marginRight: 16 },
   empty: { textAlign: 'center', marginTop: 48, opacity: 0.6 },
   fab: { position: 'absolute', right: 16, bottom: 16 },
 });
