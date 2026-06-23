@@ -1,16 +1,19 @@
 {
   "expo": {
-    "name": "_init",
-    "slug": "_init",
+    "name": "TenaMonitore",
+    "slug": "tena-monitore",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "init",
+    "scheme": "tenamonitore",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tenamonitore.app",
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.tenamonitore.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -34,7 +37,40 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      ["@morrowdigital/watermelondb-expo-plugin"],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "packagingOptions": {
+              "pickFirst": ["**/libc++_shared.so"]
+            }
+          }
+        }
+      ],
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O TenaMonitore usa sua localização para mapear talhões e registrar observações georreferenciadas durante as visitas técnicas."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O TenaMonitore usa a câmera para fotografar pragas e doenças nos talhões.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O TenaMonitore acessa suas fotos para anexar imagens às observações de campo."
+        }
+      ],
+      "expo-sharing",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,17 +1,32 @@
 {
-  "name": "init",
+  "name": "tena-monitore",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~56.0.18",
+    "@maplibre/maplibre-react-native": "^11.3.4",
+    "@nozbe/watermelondb": "^0.28.0",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/netinfo": "12.0.1",
+    "@supabase/supabase-js": "^2.108.2",
+    "@turf/turf": "^7.3.5",
     "expo": "~56.0.12",
+    "expo-build-properties": "~56.0.19",
+    "expo-camera": "~56.0.8",
     "expo-constants": "~56.0.18",
+    "expo-crypto": "~56.0.4",
     "expo-device": "~56.0.4",
+    "expo-file-system": "~56.0.8",
     "expo-font": "~56.0.7",
     "expo-glass-effect": "~56.0.4",
     "expo-image": "~56.0.11",
+    "expo-image-picker": "~56.0.18",
     "expo-linking": "~56.0.14",
+    "expo-location": "~56.0.18",
+    "expo-print": "~56.0.4",
     "expo-router": "~56.2.11",
+    "expo-secure-store": "~56.0.4",
+    "expo-sharing": "~56.0.18",
     "expo-splash-screen": "~56.0.10",
     "expo-status-bar": "~56.0.4",
     "expo-symbols": "~56.0.6",
@@ -19,25 +34,45 @@
     "expo-web-browser": "~56.0.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-hook-form": "^7.80.0",
     "react-native": "0.85.3",
     "react-native-gesture-handler": "~2.31.1",
+    "react-native-paper": "^5.15.3",
     "react-native-reanimated": "4.3.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
+    "react-native-url-polyfill": "^3.0.0",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.8.3"
+    "react-native-worklets": "0.8.3",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@babel/plugin-proposal-decorators": "^7.29.7",
+    "@morrowdigital/watermelondb-expo-plugin": "^2.4.0-beta.0",
+    "@types/geojson": "^7946.0.16",
     "@types/react": "~19.2.2",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "comment": "WatermelonDB usa JSI e é compatível com a New Architecture (validado via expo export); a RN Directory apenas não o marca como 'testado'.",
+        "exclude": [
+          "@nozbe/watermelondb",
+          "@nozbe/simdjson"
+        ],
+        "listUnknownPackages": false
+      }
+    }
+  }
 }
