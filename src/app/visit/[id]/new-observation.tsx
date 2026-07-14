@@ -21,9 +21,13 @@ import {
   TextInput,
 } from 'react-native-paper';
 
+import { booleanPointInPolygon } from '@turf/turf';
+
+import { FieldPolygons } from '@/components/FieldPolygons';
 import { database } from '@/db';
 import type { Farm, Field, Observation, ObservationPhoto, Threat, Visit } from '@/db/models';
 import { useChildren, useCollection } from '@/db/useCollection';
+import { fieldsToFeatureCollection, parseBoundary } from '@/lib/boundaries';
 import { formatGeoPoint, getCurrentPosition, type GeoPoint } from '@/lib/location';
 import { BRAZIL_CENTER, satelliteStyle } from '@/lib/mapStyle';
 import { persistPhoto } from '@/lib/photos';
@@ -68,6 +72,22 @@ export default function NewObservationScreen() {
     return BRAZIL_CENTER;
   }, [farm]);
 
+  const fieldPolygons = useMemo(
+    () => fieldsToFeatureCollection(fields),
+    [fields],
+  );
+
+  // Ao fixar o pin dentro de um talhão com polígono, seleciona-o sozinho.
+  const autoSelectField = (point: GeoPoint) => {
+    for (const f of fields) {
+      const boundary = parseBoundary(f.boundary);
+      if (boundary && booleanPointInPolygon([point.lng, point.lat], boundary)) {
+        setFieldId(f.id);
+        return;
+      }
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     getCurrentPosition().then((point) => {
@@ -75,6 +95,7 @@ export default function NewObservationScreen() {
       setLocating(false);
       if (point && !pinWasAdjusted.current) {
         setPin(point);
+        autoSelectField(point);
         cameraRef.current?.jumpTo({ center: [point.lng, point.lat], zoom: 17 });
       }
     });
@@ -91,6 +112,7 @@ export default function NewObservationScreen() {
     if (point) {
       pinWasAdjusted.current = true;
       setPin(point);
+      autoSelectField(point);
       cameraRef.current?.jumpTo({ center: [point.lng, point.lat], zoom: 17 });
     } else {
       Alert.alert('GPS', 'Não foi possível obter sua posição.');
@@ -205,6 +227,7 @@ export default function NewObservationScreen() {
               const [lng, lat] = e.nativeEvent.lngLat;
               pinWasAdjusted.current = true;
               setPin({ lat, lng });
+              autoSelectField({ lat, lng });
             }}
           >
             <Camera
@@ -215,6 +238,7 @@ export default function NewObservationScreen() {
               }}
             />
             <UserLocation />
+            <FieldPolygons features={fieldPolygons} />
             {pin ? (
               <Marker lngLat={[pin.lng, pin.lat]} anchor="bottom">
                 <MaterialCommunityIcons

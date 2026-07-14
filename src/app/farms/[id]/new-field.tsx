@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Appbar, Button, Chip, Text, TextInput } from 'react-native-paper';
@@ -27,19 +27,22 @@ export default function NewFieldScreen() {
     if (!canSave) return;
     setSaving(true);
     try {
+      let fieldId = '';
       await database.write(async () => {
-        await database.get<Field>('fields').create((f) => {
+        const field = await database.get<Field>('fields').create((f) => {
           f.farmId = farmId;
           f.cropId = cropId;
           f.name = name.trim();
           const parsed = parseFloat(areaHa.replace(',', '.'));
           f.areaHa = Number.isFinite(parsed) ? parsed : null;
           f.season = season.trim() || null;
-          f.boundary = null; // o desenho do polígono no mapa vem no próximo passo
+          f.boundary = null;
         });
+        fieldId = field.id;
       });
       void syncNow();
-      router.back();
+      // Emenda o desenho do polígono no fluxo (a área é recalculada ao salvar).
+      router.replace(`/farms/${farmId}/draw?fieldId=${fieldId}` as Href);
     } finally {
       setSaving(false);
     }

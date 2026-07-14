@@ -10,8 +10,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FAB, Text } from 'react-native-paper';
 
+import { FieldPolygons } from '@/components/FieldPolygons';
 import type { Farm, Field, Observation, Threat, Visit } from '@/db/models';
 import { useCollection } from '@/db/useCollection';
+import { fieldsToFeatureCollection } from '@/lib/boundaries';
 import { formatVisitDate } from '@/lib/dates';
 import { getCurrentPosition } from '@/lib/location';
 import { BRAZIL_CENTER, satelliteStyle } from '@/lib/mapStyle';
@@ -34,6 +36,10 @@ export default function MapScreen() {
   const located = useMemo(
     () => observations.filter((o) => o.lat != null && o.lng != null),
     [observations],
+  );
+  const fieldPolygons = useMemo(
+    () => fieldsToFeatureCollection(fields),
+    [fields],
   );
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -87,6 +93,7 @@ export default function MapScreen() {
           initialViewState={{ center: initialCenter, zoom: initialZoom }}
         />
         <UserLocation />
+        <FieldPolygons features={fieldPolygons} />
 
         {farms
           .filter((f) => f.centerLat != null && f.centerLng != null)
