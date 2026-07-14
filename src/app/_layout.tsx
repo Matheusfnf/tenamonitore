@@ -4,11 +4,12 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ActivityIndicator, MD3LightTheme, PaperProvider } from 'react-native-paper';
+import { ActivityIndicator, PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { database } from '@/db';
+import { appTheme } from '@/lib/theme';
 import { SyncProvider } from '@/sync/SyncProvider';
 
 function RootNavigator() {
@@ -42,7 +43,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <PaperProvider
-          theme={MD3LightTheme}
+          theme={appTheme}
           settings={{
             icon: ({ name, color, size }) => (
               <MaterialCommunityIcons name={name as any} color={color} size={size} />

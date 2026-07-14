@@ -66,12 +66,19 @@ export default function FarmDetailScreen() {
         )}
       />
 
-      {isAdmin && (
+      {isAdmin ? (
         <FAB
           icon="plus"
           label="Talhão"
           style={styles.fab}
           onPress={() => router.push(`/farms/${farmId}/new-field` as Href)}
+        />
+      ) : (
+        <FAB
+          icon="clipboard-plus-outline"
+          label="Nova visita"
+          style={styles.fab}
+          onPress={() => router.push(`/visit/new?farmId=${farmId}` as Href)}
         />
       )}
     </View>

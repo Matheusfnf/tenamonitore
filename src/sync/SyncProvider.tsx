@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { uploadPendingPhotos } from '@/sync/photoQueue';
 import { runSync } from '@/sync/sync';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
@@ -44,6 +45,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
       setStatus('syncing');
       await runSync();
+      // Fotos pendentes sobem pro Storage após o sync das tabelas; se alguma
+      // subiu, um segundo sync empurra storage_path/uploaded pro Postgres.
+      const uploaded = await uploadPendingPhotos();
+      if (uploaded > 0) await runSync();
       setStatus('idle');
       setLastSyncedAt(Date.now());
     } catch (e) {
