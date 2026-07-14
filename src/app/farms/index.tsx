@@ -1,6 +1,7 @@
 import { useRouter, type Href } from 'expo-router';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { Appbar, Card, FAB, Text } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
 import type { Farm } from '@/db/models';
@@ -9,6 +10,7 @@ import { useCollection } from '@/db/useCollection';
 export default function FarmsListScreen() {
   const router = useRouter();
   const { isAdmin } = useAuth();
+  const insets = useSafeAreaInsets();
   const farms = useCollection<Farm>('farms');
 
   return (
@@ -24,7 +26,10 @@ export default function FarmsListScreen() {
       <FlatList
         data={farms}
         keyExtractor={(f) => f.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[
+          styles.list,
+          { paddingBottom: 96 + insets.bottom },
+        ]}
         ListEmptyComponent={
           <Text style={styles.empty}>
             {isAdmin
@@ -62,7 +67,7 @@ export default function FarmsListScreen() {
       {isAdmin && (
         <FAB
           icon="plus"
-          style={styles.fab}
+          style={[styles.fab, { bottom: 16 + insets.bottom }]}
           onPress={() => router.push('/farms/new')}
         />
       )}

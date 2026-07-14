@@ -9,9 +9,10 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { FeatureCollection, Position } from 'geojson';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Appbar, Button, Chip, Text } from 'react-native-paper';
+import { ActivityIndicator, Appbar, Button, Chip, Text } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FieldPolygons } from '@/components/FieldPolygons';
 import { database } from '@/db';
@@ -35,17 +36,26 @@ export default function DrawFieldScreen() {
   const { syncNow } = useSync();
   const farmId = id ?? '';
 
+  const insets = useSafeAreaInsets();
   const farm = useChildren<Farm>('farms', 'id', farmId)[0];
   const fields = useChildren<Field>('fields', 'farm_id', farmId);
   const field = fields.find((f) => f.id === fieldId);
 
-  // Vértices do polígono em edição ([lng, lat]); inicia do boundary existente.
-  const [vertices, setVertices] = useState<Position[]>(() => {
-    const existing = parseBoundary(field?.boundary ?? null);
-    if (!existing) return [];
-    const ring = existing.geometry.coordinates[0] ?? [];
-    return ring.slice(0, Math.max(0, ring.length - 1)); // remove o fechamento
-  });
+  // Vértices do polígono em edição ([lng, lat]). O talhão carrega do banco de
+  // forma assíncrona — inicializar via useState perderia o boundary existente
+  // (no 1º render `field` ainda é undefined). Por isso o efeito abaixo roda
+  // UMA vez assim que o registro chega.
+  const [vertices, setVertices] = useState<Position[]>([]);
+  const loadedExisting = useRef(false);
+  useEffect(() => {
+    if (loadedExisting.current || !field) return;
+    loadedExisting.current = true;
+    const existing = parseBoundary(field.boundary);
+    if (existing) {
+      const ring = existing.geometry.coordinates[0] ?? [];
+      setVertices(ring.slice(0, Math.max(0, ring.length - 1))); // sem o fechamento
+    }
+  }, [field]);
   const [saving, setSaving] = useState(false);
 
   const polygon = vertices.length >= 3 ? polygonFromVertices(vertices) : null;
@@ -121,6 +131,12 @@ export default function DrawFieldScreen() {
         />
       </Appbar.Header>
 
+      {!field ? (
+        <View style={styles.loading}>
+          <ActivityIndicator />
+        </View>
+      ) : (
+      <>
       <View style={styles.mapWrap}>
         <MapLibreMap
           style={styles.map}
@@ -169,7 +185,7 @@ export default function DrawFieldScreen() {
         </View>
       </View>
 
-      <View style={styles.toolbar}>
+      <View style={[styles.toolbar, { paddingBottom: 12 + insets.bottom }]}>
         <Chip
           icon="vector-polygon"
           compact
@@ -205,12 +221,15 @@ export default function DrawFieldScreen() {
           </Button>
         </View>
       </View>
+      </>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.background },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   mapWrap: { flex: 1 },
   map: { flex: 1 },
   vertex: {

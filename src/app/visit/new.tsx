@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Appbar, Button, Card, Chip, Text, TextInput } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { database } from '@/db';
@@ -19,6 +20,7 @@ export default function NewVisitScreen() {
   const router = useRouter();
   const { profile } = useAuth();
   const { syncNow } = useSync();
+  const insets = useSafeAreaInsets();
   const farms = useCollection<Farm>('farms');
 
   const [farmId, setFarmId] = useState<string | null>(farmIdParam ?? null);
@@ -77,7 +79,12 @@ export default function NewVisitScreen() {
         <Appbar.Content title="Nova visita" />
       </Appbar.Header>
 
-      <ScrollView contentContainerStyle={styles.form}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.form,
+          { paddingBottom: 32 + insets.bottom },
+        ]}
+      >
         <Text variant="labelLarge">Fazenda *</Text>
         {farms.length === 0 ? (
           <Text style={styles.muted}>

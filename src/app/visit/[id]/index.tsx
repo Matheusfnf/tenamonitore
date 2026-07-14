@@ -12,6 +12,7 @@ import {
   Text,
   TextInput,
 } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { database } from '@/db';
 import type {
@@ -34,6 +35,7 @@ export default function VisitDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { syncNow } = useSync();
+  const insets = useSafeAreaInsets();
   const visitId = id ?? '';
 
   const visit = useChildren<Visit>('visits', 'id', visitId)[0];
@@ -148,7 +150,10 @@ export default function VisitDetailScreen() {
       <FlatList
         data={observations}
         keyExtractor={(o) => o.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[
+          styles.list,
+          { paddingBottom: 96 + insets.bottom },
+        ]}
         ListHeaderComponent={
           visit ? (
             <View style={styles.header}>
@@ -262,7 +267,7 @@ export default function VisitDetailScreen() {
           icon="plus"
           label="Observação"
           color="#fff"
-          style={styles.fab}
+          style={[styles.fab, { bottom: 16 + insets.bottom }]}
           onPress={() =>
             router.push(`/visit/${visitId}/new-observation` as Href)
           }

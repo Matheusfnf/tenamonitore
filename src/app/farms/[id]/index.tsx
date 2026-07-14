@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { Appbar, Button, Card, FAB, ProgressBar, Text } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
 import type { Farm, Field } from '@/db/models';
@@ -31,6 +32,7 @@ export default function FarmDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { isAdmin } = useAuth();
+  const insets = useSafeAreaInsets();
   const farmId = id ?? '';
   const farm = useChildren<Farm>('farms', 'id', farmId)[0];
   const fields = useChildren<Field>('fields', 'farm_id', farmId);
@@ -125,7 +127,10 @@ export default function FarmDetailScreen() {
       <FlatList
         data={fields}
         keyExtractor={(f) => f.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[
+          styles.list,
+          { paddingBottom: 96 + insets.bottom },
+        ]}
         ListHeaderComponent={
           farm ? (
             <View style={styles.header}>
@@ -249,7 +254,7 @@ export default function FarmDetailScreen() {
           icon="plus"
           label="Talhão"
           color="#fff"
-          style={styles.fab}
+          style={[styles.fab, { bottom: 16 + insets.bottom }]}
           onPress={() => router.push(`/farms/${farmId}/new-field` as Href)}
         />
       ) : (
@@ -257,7 +262,7 @@ export default function FarmDetailScreen() {
           icon="clipboard-plus-outline"
           label="Nova visita"
           color="#fff"
-          style={styles.fab}
+          style={[styles.fab, { bottom: 16 + insets.bottom }]}
           onPress={() => router.push(`/visit/new?farmId=${farmId}` as Href)}
         />
       )}

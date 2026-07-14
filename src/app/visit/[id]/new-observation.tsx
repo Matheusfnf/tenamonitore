@@ -20,6 +20,7 @@ import {
   Text,
   TextInput,
 } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { booleanPointInPolygon } from '@turf/turf';
 
@@ -41,6 +42,7 @@ export default function NewObservationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { syncNow } = useSync();
+  const insets = useSafeAreaInsets();
   const visitId = id ?? '';
 
   const visit = useChildren<Visit>('visits', 'id', visitId)[0];
@@ -213,7 +215,12 @@ export default function NewObservationScreen() {
         <Appbar.Content title="Nova observação" />
       </Appbar.Header>
 
-      <ScrollView contentContainerStyle={styles.form}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.form,
+          { paddingBottom: 32 + insets.bottom },
+        ]}
+      >
         <Text variant="labelLarge">Local da observação</Text>
         <Text variant="bodySmall" style={styles.muted}>
           Toque no mapa para fixar o pin no ponto observado.
