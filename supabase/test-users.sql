@@ -15,6 +15,9 @@
 do $$
 declare
   org constant uuid := '00000000-0000-0000-0000-000000000001';
+  -- 'admin' = app completo (gestão de fazendas/talhões + visão da org);
+  -- 'consultant' = só fluxo de campo (visitas/observações/relatórios).
+  user_role constant text := 'admin';
   emails constant text[] := array[
     'revisor.google@teste.tenamonitore.app',
     'testador1@teste.tenamonitore.app',
@@ -38,16 +41,18 @@ begin
        set raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb)
            || jsonb_build_object(
                 'full_name', names[i],
-                'role', 'consultant',
+                'role', user_role,
                 'organization_id', org::text)
      where id = uid;
 
     update public.profiles
        set full_name = names[i],
-           role = 'consultant',
+           role = user_role,
            organization_id = org
      where id = uid;
 
+    -- assignments só importam p/ consultores (admin enxerga a org toda),
+    -- mas criar não faz mal e cobre o caso de rebaixar o papel depois.
     insert into public.assignments (farm_id, consultant_id)
     select f.id, uid
       from public.farms f
@@ -59,6 +64,6 @@ begin
             and a.consultant_id = uid
             and a.deleted_at is null);
 
-    raise notice 'OK: % (%) configurado como consultor da org', emails[i], uid;
+    raise notice 'OK: % (%) configurado como % da org', emails[i], uid, user_role;
   end loop;
 end $$;
