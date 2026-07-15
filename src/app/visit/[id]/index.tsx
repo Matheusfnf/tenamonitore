@@ -31,6 +31,8 @@ import { palette } from '@/lib/theme';
 import { shareVisitReport } from '@/reports/visitReport';
 import { useSync } from '@/sync/SyncProvider';
 
+const WEATHER_OPTIONS = ['Ensolarado', 'Parcialmente nublado', 'Nublado', 'Chuvoso'];
+
 export default function VisitDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -65,6 +67,32 @@ export default function VisitDetailScreen() {
   const [closeNotes, setCloseNotes] = useState('');
   const [closing, setClosing] = useState(false);
   const [sharing, setSharing] = useState(false);
+
+  // Edição inline dos dados da visita (nome/clima/notas — como nos relatórios).
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [notesDraft, setNotesDraft] = useState<string | null>(null);
+
+  const persistVisit = async (updates: {
+    name?: string;
+    weather?: string | null;
+    notes?: string;
+  }) => {
+    if (!visit) return;
+    try {
+      await database.write(async () => {
+        await visit.update((v) => {
+          if (updates.name !== undefined) v.name = updates.name.trim() || null;
+          if (updates.weather !== undefined) v.weather = updates.weather;
+          if (updates.notes !== undefined) {
+            v.notes = updates.notes.trim() || null;
+          }
+        });
+      });
+      void syncNow();
+    } catch (e) {
+      Alert.alert('Visita', `Não foi possível salvar: ${String(e)}`);
+    }
+  };
 
   const isOpen = visit?.status === 'open';
 
@@ -196,24 +224,61 @@ export default function VisitDetailScreen() {
                 <Chip compact icon={isOpen ? 'progress-clock' : 'check-circle'}>
                   {isOpen ? 'Em andamento' : 'Encerrada'}
                 </Chip>
-                {visit.weather ? (
-                  <Chip compact icon="weather-partly-cloudy">
-                    {visit.weather}
-                  </Chip>
-                ) : null}
                 {visit.lat != null && visit.lng != null ? (
                   <Chip compact icon="crosshairs-gps">
                     GPS registrado
                   </Chip>
                 ) : null}
               </View>
-              {visit.notes ? (
-                <Text variant="bodyMedium" style={styles.muted}>
-                  {visit.notes}
-                </Text>
-              ) : null}
+
+              <TextInput
+                label="Nome da visita"
+                placeholder="Ex.: Monitoramento semanal"
+                value={nameDraft ?? visit.name ?? ''}
+                onChangeText={setNameDraft}
+                onEndEditing={() => {
+                  if (nameDraft !== null) void persistVisit({ name: nameDraft });
+                }}
+                mode="outlined"
+                dense
+              />
+
+              <Text variant="labelLarge">Clima</Text>
+              <View style={styles.chips}>
+                {WEATHER_OPTIONS.map((w) => (
+                  <Chip
+                    key={w}
+                    compact
+                    selected={visit.weather === w}
+                    showSelectedCheck
+                    onPress={() =>
+                      void persistVisit({
+                        weather: visit.weather === w ? null : w,
+                      })
+                    }
+                  >
+                    {w}
+                  </Chip>
+                ))}
+              </View>
+
+              <TextInput
+                label="Observações gerais"
+                value={notesDraft ?? visit.notes ?? ''}
+                onChangeText={setNotesDraft}
+                onEndEditing={() => {
+                  if (notesDraft !== null) {
+                    void persistVisit({ notes: notesDraft });
+                  }
+                }}
+                mode="outlined"
+                multiline
+                numberOfLines={3}
+                dense
+              />
+
               <Text variant="titleSmall" style={styles.sectionTitle}>
-                Observações ({observations.length})
+                Observações de campo ({observations.length})
               </Text>
             </View>
           ) : null
