@@ -12,7 +12,6 @@ import type { FeatureCollection, Position } from 'geojson';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Appbar, Button, Chip, Text } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FieldPolygons } from '@/components/FieldPolygons';
 import { database } from '@/db';
@@ -36,7 +35,6 @@ export default function DrawFieldScreen() {
   const { syncNow } = useSync();
   const farmId = id ?? '';
 
-  const insets = useSafeAreaInsets();
   const farm = useChildren<Farm>('farms', 'id', farmId)[0];
   const fields = useChildren<Field>('fields', 'farm_id', farmId);
   const field = fields.find((f) => f.id === fieldId);
@@ -185,7 +183,7 @@ export default function DrawFieldScreen() {
         </View>
       </View>
 
-      <View style={[styles.toolbar, { paddingBottom: 12 + insets.bottom }]}>
+      <View style={[styles.toolbar, { paddingBottom: 12 }]}>
         <Chip
           icon="vector-polygon"
           compact

@@ -5,7 +5,6 @@ import type { FeatureCollection } from 'geojson';
 import { useMemo, useState } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { Appbar, Button, Checkbox, Text } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FieldPolygons } from '@/components/FieldPolygons';
 import { database } from '@/db';
@@ -21,7 +20,6 @@ export default function ImportFieldsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { syncNow } = useSync();
-  const insets = useSafeAreaInsets();
   const farmId = id ?? '';
 
   const farm = useChildren<Farm>('farms', 'id', farmId)[0];
@@ -167,7 +165,7 @@ export default function ImportFieldsScreen() {
             )}
           />
 
-          <View style={[styles.footer, { paddingBottom: 12 + insets.bottom }]}>
+          <View style={[styles.footer, { paddingBottom: 12 }]}>
             <Text variant="bodySmall" style={styles.muted}>
               {selected.size} de {imported.length} selecionados ·{' '}
               {Math.round(totalHa * 100) / 100} ha

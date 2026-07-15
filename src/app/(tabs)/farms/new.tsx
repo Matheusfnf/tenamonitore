@@ -2,7 +2,6 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Appbar, Button, HelperText, TextInput } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { database } from '@/db';
@@ -13,7 +12,6 @@ export default function NewFarmScreen() {
   const router = useRouter();
   const { profile } = useAuth();
   const { syncNow } = useSync();
-  const insets = useSafeAreaInsets();
 
   const [name, setName] = useState('');
   const [ownerName, setOwnerName] = useState('');
@@ -54,7 +52,7 @@ export default function NewFarmScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.form,
-          { paddingBottom: 32 + insets.bottom },
+          { paddingBottom: 32 },
         ]}
       >
         <TextInput

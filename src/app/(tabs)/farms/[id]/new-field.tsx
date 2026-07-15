@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Appbar, Button, Chip, Text, TextInput } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { database } from '@/db';
 import type { Crop, Field } from '@/db/models';
@@ -13,7 +12,6 @@ export default function NewFieldScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { syncNow } = useSync();
-  const insets = useSafeAreaInsets();
   const crops = useCollection<Crop>('crops');
   const farmId = id ?? '';
 
@@ -60,7 +58,7 @@ export default function NewFieldScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.form,
-          { paddingBottom: 32 + insets.bottom },
+          { paddingBottom: 32 },
         ]}
       >
         <TextInput

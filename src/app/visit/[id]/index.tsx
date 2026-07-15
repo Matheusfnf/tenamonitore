@@ -84,6 +84,8 @@ export default function VisitDetailScreen() {
       setCloseDialogOpen(false);
       setCloseNotes('');
       void syncNow();
+    } catch (e) {
+      Alert.alert('Visita', `Não foi possível encerrar: ${String(e)}`);
     } finally {
       setClosing(false);
     }

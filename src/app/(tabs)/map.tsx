@@ -9,7 +9,7 @@ import {
 import { Image } from 'expo-image';
 import { useRouter, type Href } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Button,
   Chip,
@@ -111,10 +111,6 @@ export default function MapScreen() {
   const selectedVisit = selectedVisitId
     ? visitById.get(selectedVisitId)
     : undefined;
-  const openVisit = useMemo(
-    () => visits.find((v) => v.status === 'open'),
-    [visits],
-  );
   const selectedIsOpen = selectedVisit?.status === 'open';
 
   // ---- nova visita direto do mapa ------------------------------------------
@@ -174,6 +170,29 @@ export default function MapScreen() {
       }
     } finally {
       setStarting(false);
+    }
+  };
+
+  // ---- encerrar visita direto do mapa --------------------------------------
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [closingVisit, setClosingVisit] = useState(false);
+
+  const onCloseVisitFromMap = async () => {
+    if (!selectedVisit || closingVisit) return;
+    setClosingVisit(true);
+    try {
+      await database.write(async () => {
+        await selectedVisit.update((v) => {
+          v.status = 'closed';
+        });
+      });
+      setCloseConfirmOpen(false);
+      setPendingPin(null);
+      void syncNow();
+    } catch (e) {
+      Alert.alert('Visita', `Não foi possível encerrar: ${String(e)}`);
+    } finally {
+      setClosingVisit(false);
     }
   };
 
@@ -416,7 +435,29 @@ export default function MapScreen() {
                   color={palette.green}
                 />
                 <Text variant="labelMedium" style={styles.menuPillText}>
-                  {selectedIsOpen ? 'Editar visita' : 'Ver visita'}
+                  {selectedIsOpen ? 'Editar' : 'Ver'}
+                </Text>
+              </View>
+            </TouchableRipple>
+          ) : null}
+
+          {selectedIsOpen ? (
+            <TouchableRipple
+              style={styles.editPill}
+              borderless
+              onPress={() => setCloseConfirmOpen(true)}
+            >
+              <View style={styles.menuPillInner}>
+                <MaterialCommunityIcons
+                  name="flag-checkered"
+                  size={16}
+                  color={palette.red}
+                />
+                <Text
+                  variant="labelMedium"
+                  style={[styles.menuPillText, { color: palette.red }]}
+                >
+                  Encerrar
                 </Text>
               </View>
             </TouchableRipple>
@@ -616,7 +657,7 @@ export default function MapScreen() {
         onPress={() => void recenter()}
       />
 
-      {!openVisit ? (
+      {!selectedIsOpen ? (
         <FAB
           icon="plus"
           label="Nova visita"
@@ -626,7 +667,33 @@ export default function MapScreen() {
         />
       ) : null}
 
-      {/* ---- diálogo de nova visita ---- */}
+      {/* ---- diálogos ---- */}
+      <Portal>
+        <Dialog
+          visible={closeConfirmOpen}
+          onDismiss={() => setCloseConfirmOpen(false)}
+        >
+          <Dialog.Title>Encerrar visita</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">
+              {selectedVisit ? visitLabel(selectedVisit) : ''} — {pins.length}{' '}
+              observaç{pins.length === 1 ? 'ão' : 'ões'} registrada
+              {pins.length === 1 ? '' : 's'}. Após encerrar, não é possível
+              adicionar novos pins.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setCloseConfirmOpen(false)}>Cancelar</Button>
+            <Button
+              loading={closingVisit}
+              textColor={palette.red}
+              onPress={onCloseVisitFromMap}
+            >
+              Encerrar
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
       <Portal>
         <Dialog visible={startOpen} onDismiss={() => setStartOpen(false)}>
           <Dialog.Title>Nova visita</Dialog.Title>

@@ -40,6 +40,8 @@ export default function TabsLayout() {
         name="profile"
         options={{ title: 'Perfil', tabBarIcon: tabIcon('account-outline') }}
       />
+      {/* Fazendas navega DENTRO das abas (barra visível), mas não vira aba. */}
+      <Tabs.Screen name="farms" options={{ href: null }} />
     </Tabs>
   );
 }
