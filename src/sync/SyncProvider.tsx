@@ -52,7 +52,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       setStatus('idle');
       setLastSyncedAt(Date.now());
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn('[sync] erro ao sincronizar', e);
       setStatus('error');
     } finally {

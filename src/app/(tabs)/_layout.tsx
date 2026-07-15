@@ -5,9 +5,11 @@ import type { ColorValue } from 'react-native';
 import { palette } from '@/lib/theme';
 
 function tabIcon(name: string) {
-  return ({ color, size }: { color: ColorValue; size: number }) => (
+  const TabIcon = ({ color, size }: { color: ColorValue; size: number }) => (
     <MaterialCommunityIcons name={name as any} color={color as string} size={size} />
   );
+  TabIcon.displayName = `TabIcon(${name})`;
+  return TabIcon;
 }
 
 export default function TabsLayout() {

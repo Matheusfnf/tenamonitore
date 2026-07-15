@@ -17,7 +17,6 @@ const adapter = new SQLiteAdapter({
   jsi: true, // síncrono e rápido; habilitado nativamente pelo watermelondb-expo-plugin
   dbName: 'tenamonitore',
   onSetUpError: (error) => {
-    // eslint-disable-next-line no-console
     console.error('[WatermelonDB] falha ao inicializar o banco local', error);
   },
 });

@@ -74,6 +74,19 @@ export default function NewObservationScreen() {
   );
 
   const [fieldId, setFieldId] = useState<string | null>(null);
+
+  // Ao fixar o pin dentro de um talhão com polígono, seleciona-o sozinho.
+  // (Declarada antes dos efeitos que a usam — exigência do React Compiler.)
+  const autoSelectField = (point: GeoPoint) => {
+    for (const f of fields) {
+      const boundary = parseBoundary(f.boundary);
+      if (boundary && booleanPointInPolygon([point.lng, point.lat], boundary)) {
+        setFieldId(f.id);
+        return;
+      }
+    }
+  };
+
   const [threatKind, setThreatKind] = useState<ThreatKind>('pest');
   const [threatId, setThreatId] = useState<string | null>(null);
   const [severity, setSeverity] = useState<number | null>(null);
@@ -144,17 +157,6 @@ export default function NewObservationScreen() {
     () => fieldsToFeatureCollection(fields),
     [fields],
   );
-
-  // Ao fixar o pin dentro de um talhão com polígono, seleciona-o sozinho.
-  const autoSelectField = (point: GeoPoint) => {
-    for (const f of fields) {
-      const boundary = parseBoundary(f.boundary);
-      if (boundary && booleanPointInPolygon([point.lng, point.lat], boundary)) {
-        setFieldId(f.id);
-        return;
-      }
-    }
-  };
 
   useEffect(() => {
     let cancelled = false;

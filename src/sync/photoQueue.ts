@@ -50,7 +50,6 @@ export async function uploadPendingPhotos(): Promise<number> {
       });
       uploadedCount += 1;
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn('[photos] upload falhou, tentará no próximo sync', photo.id, e);
     }
   }
