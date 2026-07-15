@@ -37,6 +37,10 @@ export default function TabsLayout() {
         options={{ title: 'Visitas', tabBarIcon: tabIcon('clipboard-text-outline') }}
       />
       <Tabs.Screen
+        name="reports"
+        options={{ title: 'Relatórios', tabBarIcon: tabIcon('file-document-outline') }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{ title: 'Perfil', tabBarIcon: tabIcon('account-outline') }}
       />

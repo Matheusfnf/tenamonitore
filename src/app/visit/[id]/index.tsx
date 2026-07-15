@@ -20,7 +20,6 @@ import type {
   Field,
   Observation,
   ObservationPhoto,
-  Report,
   Threat,
   Visit,
 } from '@/db/models';
@@ -157,16 +156,6 @@ export default function VisitDetailScreen() {
           };
         }),
       });
-      // Registra a geração do relatório (sincroniza p/ acompanhamento do admin).
-      await database.write(async () => {
-        await database.get<Report>('reports').create((r) => {
-          r.visitId = visit.id;
-          r.summary = `${observations.length} observaç${observations.length === 1 ? 'ão' : 'ões'} em ${farm?.name ?? 'fazenda'}`;
-          r.generatedAt = new Date().toISOString();
-          r.pdfPath = null;
-        });
-      });
-      void syncNow();
     } catch (e) {
       Alert.alert('Relatório', `Não foi possível gerar o PDF: ${String(e)}`);
     } finally {

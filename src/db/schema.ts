@@ -8,7 +8,7 @@ import { appSchema, tableSchema } from '@nozbe/watermelondb';
  * Os nomes das colunas são iguais aos do Postgres p/ um sync 1:1.
  */
 export const schema = appSchema({
-  version: 2,
+  version: 3,
   tables: [
     tableSchema({
       name: 'organizations',
@@ -143,7 +143,14 @@ export const schema = appSchema({
     tableSchema({
       name: 'reports',
       columns: [
-        { name: 'visit_id', type: 'string', isIndexed: true },
+        // legado (relatório rápido de UMA visita); relatórios novos usam visit_ids
+        { name: 'visit_id', type: 'string', isOptional: true, isIndexed: true },
+        { name: 'organization_id', type: 'string', isOptional: true },
+        { name: 'consultant_id', type: 'string', isOptional: true },
+        { name: 'farm_id', type: 'string', isOptional: true },
+        { name: 'title', type: 'string', isOptional: true },
+        { name: 'visit_ids', type: 'string', isOptional: true }, // JSON array
+        { name: 'content', type: 'string', isOptional: true }, // JSON de blocos
         { name: 'summary', type: 'string', isOptional: true },
         { name: 'pdf_path', type: 'string', isOptional: true },
         { name: 'generated_at', type: 'string', isOptional: true },

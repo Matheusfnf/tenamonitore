@@ -20,5 +20,22 @@ export const migrations = schemaMigrations({
         }),
       ],
     },
+    {
+      // relatórios técnicos compostos (migração 0007 no Postgres)
+      toVersion: 3,
+      steps: [
+        addColumns({
+          table: 'reports',
+          columns: [
+            { name: 'organization_id', type: 'string', isOptional: true },
+            { name: 'consultant_id', type: 'string', isOptional: true },
+            { name: 'farm_id', type: 'string', isOptional: true },
+            { name: 'title', type: 'string', isOptional: true },
+            { name: 'visit_ids', type: 'string', isOptional: true },
+            { name: 'content', type: 'string', isOptional: true },
+          ],
+        }),
+      ],
+    },
   ],
 });
