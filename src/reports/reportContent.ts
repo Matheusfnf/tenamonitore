@@ -12,10 +12,23 @@ export type ReportBlock =
   | { id: string; type: 'image'; uri: string; caption?: string }
   | { id: string; type: 'visits' };
 
+/**
+ * Sobrescritas do cabeçalho do documento. Campo vazio/ausente = automático
+ * (derivado das visitas selecionadas). Dá flexibilidade quando o relatório
+ * mistura fazendas/produtores ou quando o consultor quer um rótulo próprio
+ * (ex.: "Safra 2025/26", "Vários produtores").
+ */
+export interface ReportHeader {
+  producer?: string;
+  farm?: string;
+  period?: string;
+}
+
 export interface ReportContent {
   version: 1;
   /** Incluir as fotos das observações na seção de visitas. */
   includeObservationPhotos: boolean;
+  header?: ReportHeader;
   blocks: ReportBlock[];
 }
 
@@ -39,6 +52,7 @@ export function parseReportContent(raw: string | null): ReportContent {
       return {
         version: 1,
         includeObservationPhotos: parsed.includeObservationPhotos !== false,
+        header: parsed.header ?? undefined,
         blocks: parsed.blocks,
       };
     }

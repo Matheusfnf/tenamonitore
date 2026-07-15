@@ -90,6 +90,9 @@ export default function ReportBuilderScreen() {
   );
 
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
+  const [producerDraft, setProducerDraft] = useState<string | null>(null);
+  const [farmDraft, setFarmDraft] = useState<string | null>(null);
+  const [periodDraft, setPeriodDraft] = useState<string | null>(null);
   const [visitPickerOpen, setVisitPickerOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
 
@@ -218,6 +221,40 @@ export default function ReportBuilderScreen() {
   const visitLabel = (v: Visit) =>
     `${v.name?.trim() || (farmById.get(v.farmId)?.name ?? 'Fazenda')} · ${formatVisitDate(v.visitDate)}`;
 
+  // ---- cabeçalho: automático (derivado das visitas) com sobrescrita manual --
+  const visitFarms = useMemo(
+    () => [
+      ...new Set(
+        selectedVisits
+          .map((v) => farmById.get(v.farmId))
+          .filter((f): f is Farm => !!f),
+      ),
+    ],
+    [selectedVisits, farmById],
+  );
+  const autoFarm = visitFarms.map((f) => f.name).join(', ');
+  const autoProducer = [
+    ...new Set(visitFarms.map((f) => f.ownerName).filter(Boolean) as string[]),
+  ].join(', ');
+  const autoPeriod = useMemo(() => {
+    const dates = selectedVisits.map((v) => v.visitDate).sort();
+    if (dates.length === 0) return '';
+    return dates[0] === dates[dates.length - 1]
+      ? formatVisitDate(dates[0])
+      : `${formatVisitDate(dates[0])} a ${formatVisitDate(dates[dates.length - 1])}`;
+  }, [selectedVisits]);
+
+  const persistHeaderField = (
+    field: 'producer' | 'farm' | 'period',
+    value: string,
+  ) =>
+    persist({
+      content: {
+        ...content,
+        header: { ...content.header, [field]: value.trim() || undefined },
+      },
+    });
+
   // ---- geração do PDF -------------------------------------------------------
   const onShare = async () => {
     if (!report || sharing) return;
@@ -262,31 +299,18 @@ export default function ReportBuilderScreen() {
           }),
       }));
 
-      const visitFarms = [
-        ...new Set(
-          selectedVisits
-            .map((v) => farmById.get(v.farmId))
-            .filter((f): f is Farm => !!f),
-        ),
-      ];
-      const dates = selectedVisits.map((v) => v.visitDate).sort();
-      const period =
-        dates.length > 0
-          ? dates[0] === dates[dates.length - 1]
-            ? formatVisitDate(dates[0])
-            : `${formatVisitDate(dates[0])} a ${formatVisitDate(dates[dates.length - 1])}`
-          : null;
+      // cabeçalho: sobrescrita manual vence; vazio = automático das visitas
+      const header = content.header ?? {};
+      const farmDisplay = header.farm?.trim() || autoFarm;
+      const producerDisplay = header.producer?.trim() || autoProducer;
+      const periodDisplay = header.period?.trim() || autoPeriod;
 
       await shareTechReport({
         title,
         consultantName: profile?.fullName ?? null,
-        farmNames: visitFarms.map((f) => f.name),
-        ownerNames: [
-          ...new Set(
-            visitFarms.map((f) => f.ownerName).filter(Boolean) as string[],
-          ),
-        ],
-        period,
+        farmNames: farmDisplay ? [farmDisplay] : [],
+        ownerNames: producerDisplay ? [producerDisplay] : [],
+        period: periodDisplay || null,
         includePhotos: content.includeObservationPhotos,
         blocks: content.blocks,
         visits: visitData,
@@ -342,6 +366,54 @@ export default function ReportBuilderScreen() {
           }}
           mode="outlined"
         />
+
+        {/* ---- cabeçalho do documento ---- */}
+        <View style={styles.section}>
+          <Text variant="titleSmall" style={styles.sectionTitle}>
+            Cabeçalho do documento
+          </Text>
+          <Text variant="bodySmall" style={styles.muted}>
+            Deixe em branco para preencher automaticamente com os dados das
+            visitas selecionadas.
+          </Text>
+          <TextInput
+            label="Produtor / Cliente"
+            placeholder={autoProducer ? `Automático: ${autoProducer}` : '—'}
+            value={producerDraft ?? content.header?.producer ?? ''}
+            onChangeText={setProducerDraft}
+            onEndEditing={() => {
+              if (producerDraft !== null) {
+                void persistHeaderField('producer', producerDraft);
+              }
+            }}
+            mode="outlined"
+            dense
+          />
+          <TextInput
+            label="Fazenda(s)"
+            placeholder={autoFarm ? `Automático: ${autoFarm}` : '—'}
+            value={farmDraft ?? content.header?.farm ?? ''}
+            onChangeText={setFarmDraft}
+            onEndEditing={() => {
+              if (farmDraft !== null) void persistHeaderField('farm', farmDraft);
+            }}
+            mode="outlined"
+            dense
+          />
+          <TextInput
+            label="Período"
+            placeholder={autoPeriod ? `Automático: ${autoPeriod}` : 'Ex.: Safra 2025/26'}
+            value={periodDraft ?? content.header?.period ?? ''}
+            onChangeText={setPeriodDraft}
+            onEndEditing={() => {
+              if (periodDraft !== null) {
+                void persistHeaderField('period', periodDraft);
+              }
+            }}
+            mode="outlined"
+            dense
+          />
+        </View>
 
         {/* ---- visitas ---- */}
         <View style={styles.section}>
