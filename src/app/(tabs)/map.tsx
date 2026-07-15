@@ -199,6 +199,25 @@ export default function MapScreen() {
   // ---- pin pendente (toque no mapa durante visita aberta) ------------------
   const [pendingPin, setPendingPin] = useState<GeoPoint | null>(null);
 
+  // O toque num Marker também dispara o onPress do MAPA, que limparia a
+  // seleção (ou criaria pin fantasma por cima). Solução: a ação do mapa roda
+  // com 200ms de atraso e é cancelada quando o toque veio de um pin.
+  const mapPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markerPressedAt = useRef(0);
+  const cancelMapPress = () => {
+    if (mapPressTimer.current) {
+      clearTimeout(mapPressTimer.current);
+      mapPressTimer.current = null;
+    }
+  };
+  const onMarkerPress = (obsId: string) => {
+    markerPressedAt.current = Date.now();
+    cancelMapPress();
+    setPendingPin(null);
+    setSelectedObsId(obsId);
+  };
+  useEffect(() => cancelMapPress, []);
+
   const confirmPendingPin = () => {
     if (!pendingPin || !selectedVisitId) return;
     const { lat, lng } = pendingPin;
@@ -317,18 +336,24 @@ export default function MapScreen() {
         mapStyle={satelliteStyle}
         attributionPosition={{ bottom: 8, left: 8 }}
         onPress={(e) => {
-          setSelectedObsId(null);
-          if (menuOpen) {
-            setMenuOpen(false);
-            return;
-          }
-          // Durante uma visita aberta, o toque propõe um pin de observação.
-          if (selectedIsOpen) {
-            const [lng, lat] = e.nativeEvent.lngLat;
-            setPendingPin({ lat, lng });
-          } else {
-            setPendingPin(null);
-          }
+          // toque que veio de um pin (o Marker também propaga pro mapa)
+          if (Date.now() - markerPressedAt.current < 300) return;
+          const [lng, lat] = e.nativeEvent.lngLat;
+          cancelMapPress();
+          mapPressTimer.current = setTimeout(() => {
+            mapPressTimer.current = null;
+            setSelectedObsId(null);
+            if (menuOpen) {
+              setMenuOpen(false);
+              return;
+            }
+            // Durante uma visita aberta, o toque propõe um pin de observação.
+            if (selectedIsOpen) {
+              setPendingPin({ lat, lng });
+            } else {
+              setPendingPin(null);
+            }
+          }, 200);
         }}
       >
         <Camera
@@ -362,7 +387,7 @@ export default function MapScreen() {
             <Marker
               key={o.id}
               lngLat={[o.lng!, o.lat!]}
-              onPress={() => setSelectedObsId(o.id)}
+              onPress={() => onMarkerPress(o.id)}
             >
               <View
                 style={[
@@ -420,7 +445,10 @@ export default function MapScreen() {
             </View>
           </TouchableRipple>
 
-          {selectedVisit ? (
+        </View>
+
+        {selectedVisit && !menuOpen ? (
+          <View style={styles.actionRow}>
             <TouchableRipple
               style={styles.editPill}
               borderless
@@ -434,35 +462,35 @@ export default function MapScreen() {
                   size={16}
                   color={palette.green}
                 />
-                <Text variant="labelMedium" style={styles.menuPillText}>
-                  {selectedIsOpen ? 'Editar' : 'Ver'}
+                <Text variant="labelMedium" style={styles.pillLabel}>
+                  {selectedIsOpen ? 'Editar visita' : 'Ver visita'}
                 </Text>
               </View>
             </TouchableRipple>
-          ) : null}
 
-          {selectedIsOpen ? (
-            <TouchableRipple
-              style={styles.editPill}
-              borderless
-              onPress={() => setCloseConfirmOpen(true)}
-            >
-              <View style={styles.menuPillInner}>
-                <MaterialCommunityIcons
-                  name="flag-checkered"
-                  size={16}
-                  color={palette.red}
-                />
-                <Text
-                  variant="labelMedium"
-                  style={[styles.menuPillText, { color: palette.red }]}
-                >
-                  Encerrar
-                </Text>
-              </View>
-            </TouchableRipple>
-          ) : null}
-        </View>
+            {selectedIsOpen ? (
+              <TouchableRipple
+                style={styles.editPill}
+                borderless
+                onPress={() => setCloseConfirmOpen(true)}
+              >
+                <View style={styles.menuPillInner}>
+                  <MaterialCommunityIcons
+                    name="flag-checkered"
+                    size={16}
+                    color={palette.red}
+                  />
+                  <Text
+                    variant="labelMedium"
+                    style={[styles.pillLabel, { color: palette.red }]}
+                  >
+                    Encerrar
+                  </Text>
+                </View>
+              </TouchableRipple>
+            ) : null}
+          </View>
+        ) : null}
 
         {menuOpen ? (
           <View style={styles.menuCard}>
@@ -782,6 +810,11 @@ const styles = StyleSheet.create({
     gap: 8,
     maxWidth: '100%',
   },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   menuPill: {
     backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: 999,
@@ -795,6 +828,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
+  pillLabel: { fontWeight: '700' },
   menuPillInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   menuPillText: { fontWeight: '700', flexShrink: 1 },
   openDot: {
