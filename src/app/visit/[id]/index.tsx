@@ -95,6 +95,7 @@ export default function VisitDetailScreen() {
     try {
       await shareVisitReport({
         farmName: farm?.name ?? 'Fazenda',
+        visitName: visit.name?.trim() || null,
         ownerName: farm?.ownerName ?? null,
         location:
           [farm?.municipality, farm?.state].filter(Boolean).join(' - ') || null,
@@ -142,8 +143,17 @@ export default function VisitDetailScreen() {
       <Appbar.Header>
         <Appbar.BackAction onPress={() => router.back()} />
         <Appbar.Content
-          title={farm?.name ?? 'Visita'}
-          subtitle={visit ? formatVisitDate(visit.visitDate) : ''}
+          title={visit?.name?.trim() || farm?.name || 'Visita'}
+          subtitle={
+            visit
+              ? [
+                  visit.name?.trim() ? farm?.name : null,
+                  formatVisitDate(visit.visitDate),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+              : ''
+          }
         />
       </Appbar.Header>
 

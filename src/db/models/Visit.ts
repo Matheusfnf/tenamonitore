@@ -15,6 +15,7 @@ export class Visit extends Model {
 
   @text('farm_id') farmId: string;
   @text('consultant_id') consultantId: string;
+  @text('name') name: string | null;
   @text('visit_date') visitDate: string;
   @text('status') status: string; // 'open' | 'closed'
   @text('weather') weather: string | null;

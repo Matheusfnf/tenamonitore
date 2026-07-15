@@ -18,6 +18,7 @@ export interface ReportObservation {
 
 export interface VisitReportData {
   farmName: string;
+  visitName: string | null;
   ownerName: string | null;
   location: string | null;
   visitDate: string; // já formatada (dd/mm/aaaa)
@@ -108,7 +109,7 @@ async function buildHtml(data: VisitReportData): Promise<string> {
       </head>
       <body>
         <h1>Relatório de visita técnica</h1>
-        <div class="subtitle">${esc(data.farmName)}</div>
+        <div class="subtitle">${esc(data.farmName)}${data.visitName ? ` — ${esc(data.visitName)}` : ''}</div>
         <div class="header-info">${headerRows}</div>
         ${data.notes ? `<h2>Observações gerais da visita</h2><div>${esc(data.notes)}</div>` : ''}
         <h2>Observações de campo (${data.observations.length})</h2>

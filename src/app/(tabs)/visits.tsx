@@ -80,9 +80,10 @@ export default function VisitsScreen() {
                 />
                 <View style={styles.cardTexts}>
                   <Text variant="titleMedium" style={styles.cardTitle}>
-                    {farm?.name ?? 'Fazenda'}
+                    {item.name?.trim() || (farm?.name ?? 'Fazenda')}
                   </Text>
                   <Text variant="bodySmall" style={styles.muted}>
+                    {item.name?.trim() ? `${farm?.name ?? 'Fazenda'} · ` : ''}
                     {formatVisitDate(item.visitDate)} · {count} observaç
                     {count === 1 ? 'ão' : 'ões'}
                   </Text>

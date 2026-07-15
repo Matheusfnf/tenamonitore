@@ -8,7 +8,7 @@ import { appSchema, tableSchema } from '@nozbe/watermelondb';
  * Os nomes das colunas são iguais aos do Postgres p/ um sync 1:1.
  */
 export const schema = appSchema({
-  version: 1,
+  version: 2,
   tables: [
     tableSchema({
       name: 'organizations',
@@ -89,6 +89,7 @@ export const schema = appSchema({
       columns: [
         { name: 'farm_id', type: 'string', isIndexed: true },
         { name: 'consultant_id', type: 'string', isIndexed: true },
+        { name: 'name', type: 'string', isOptional: true },
         { name: 'visit_date', type: 'string' },
         { name: 'status', type: 'string' },
         { name: 'weather', type: 'string', isOptional: true },

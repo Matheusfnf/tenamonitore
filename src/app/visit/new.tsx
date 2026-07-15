@@ -24,6 +24,7 @@ export default function NewVisitScreen() {
   const farms = useCollection<Farm>('farms');
 
   const [farmId, setFarmId] = useState<string | null>(farmIdParam ?? null);
+  const [name, setName] = useState('');
   const [weather, setWeather] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [gps, setGps] = useState<GeoPoint | null>(null);
@@ -56,6 +57,7 @@ export default function NewVisitScreen() {
         const visit = await database.get<Visit>('visits').create((v) => {
           v.farmId = farmId;
           v.consultantId = profile.id;
+          v.name = name.trim() || null;
           v.visitDate = new Date().toISOString().slice(0, 10);
           v.status = 'open';
           v.weather = weather;
@@ -110,6 +112,14 @@ export default function NewVisitScreen() {
             ))}
           </View>
         )}
+
+        <TextInput
+          label="Nome da visita (opcional)"
+          placeholder="Ex.: Monitoramento semanal"
+          value={name}
+          onChangeText={setName}
+          mode="outlined"
+        />
 
         <Text variant="labelLarge" style={styles.label}>
           Clima

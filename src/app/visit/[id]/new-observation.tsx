@@ -39,11 +39,23 @@ import { useSync } from '@/sync/SyncProvider';
 type ThreatKind = 'pest' | 'disease';
 
 export default function NewObservationScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, lat: latParam, lng: lngParam } = useLocalSearchParams<{
+    id: string;
+    lat?: string;
+    lng?: string;
+  }>();
   const router = useRouter();
   const { syncNow } = useSync();
   const insets = useSafeAreaInsets();
   const visitId = id ?? '';
+
+  // Ponto pré-fixado (fluxo "toque no mapa da visita"): vem por parâmetro.
+  const paramPin = useMemo<GeoPoint | null>(() => {
+    const lat = parseFloat(latParam ?? '');
+    const lng = parseFloat(lngParam ?? '');
+    return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const visit = useChildren<Visit>('visits', 'id', visitId)[0];
   const farm = useChildren<Farm>('farms', 'id', visit?.farmId ?? '')[0];
@@ -59,13 +71,23 @@ export default function NewObservationScreen() {
   const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Pin do local da observação: começa na posição GPS assim que houver fix,
-  // e o consultor pode ajustar tocando no mapa (ex.: marcar a reboleira do
-  // outro lado do talhão sem precisar caminhar até lá).
-  const [pin, setPin] = useState<GeoPoint | null>(null);
-  const [locating, setLocating] = useState(true);
-  const pinWasAdjusted = useRef(false);
+  // Pin do local da observação: se veio pré-fixado do mapa usa ele; senão
+  // começa na posição GPS assim que houver fix. O consultor pode ajustar
+  // tocando no mapa (ex.: marcar a reboleira do outro lado do talhão).
+  const [pin, setPin] = useState<GeoPoint | null>(paramPin);
+  const [locating, setLocating] = useState(!paramPin);
+  const pinWasAdjusted = useRef(!!paramPin);
   const cameraRef = useRef<CameraRef>(null);
+
+  // Com pin pré-fixado, o talhão é auto-selecionado assim que os polígonos
+  // carregam do banco (uma vez só).
+  const autoFieldDone = useRef(false);
+  useEffect(() => {
+    if (autoFieldDone.current || !paramPin || fields.length === 0) return;
+    autoFieldDone.current = true;
+    autoSelectField(paramPin);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields.length]);
 
   const initialCenter = useMemo<[number, number]>(() => {
     if (farm?.centerLat != null && farm?.centerLng != null) {

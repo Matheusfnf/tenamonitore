@@ -7,11 +7,24 @@ import {
   type CameraRef,
 } from '@maplibre/maplibre-react-native';
 import { Image } from 'expo-image';
+import { useRouter, type Href } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { FAB, IconButton, Text, TouchableRipple } from 'react-native-paper';
+import {
+  Button,
+  Chip,
+  Dialog,
+  FAB,
+  IconButton,
+  Portal,
+  Text,
+  TextInput,
+  TouchableRipple,
+} from 'react-native-paper';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { FieldPolygons } from '@/components/FieldPolygons';
+import { database } from '@/db';
 import type {
   Farm,
   Field,
@@ -23,10 +36,11 @@ import type {
 import { useCollection } from '@/db/useCollection';
 import { fieldsToFeatureCollection } from '@/lib/boundaries';
 import { formatVisitDate } from '@/lib/dates';
-import { getCurrentPosition } from '@/lib/location';
+import { formatGeoPoint, getCurrentPosition, type GeoPoint } from '@/lib/location';
 import { BRAZIL_CENTER, satelliteStyle } from '@/lib/mapStyle';
 import { SEVERITY_LABELS } from '@/lib/severity';
 import { palette } from '@/lib/theme';
+import { useSync } from '@/sync/SyncProvider';
 
 /** Cor do pin por tipo de ameaça. */
 function pinColor(threatType: string | null): string {
@@ -37,6 +51,9 @@ function pinColor(threatType: string | null): string {
 
 export default function MapScreen() {
   const cameraRef = useRef<CameraRef>(null);
+  const router = useRouter();
+  const { profile } = useAuth();
+  const { syncNow } = useSync();
   const observations = useCollection<Observation>('observations');
   const visits = useCollection<Visit>('visits');
   const farms = useCollection<Farm>('farms');
@@ -94,6 +111,83 @@ export default function MapScreen() {
   const selectedVisit = selectedVisitId
     ? visitById.get(selectedVisitId)
     : undefined;
+  const openVisit = useMemo(
+    () => visits.find((v) => v.status === 'open'),
+    [visits],
+  );
+  const selectedIsOpen = selectedVisit?.status === 'open';
+
+  // ---- nova visita direto do mapa ------------------------------------------
+  const [startOpen, setStartOpen] = useState(false);
+  const [visitName, setVisitName] = useState('');
+  const [startFarmId, setStartFarmId] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+
+  const openStartDialog = () => {
+    setVisitName('');
+    setStartFarmId(farms.length === 1 ? farms[0].id : null);
+    setStartOpen(true);
+    // Pré-seleciona a fazenda mais próxima da posição atual (se houver GPS).
+    getCurrentPosition().then((point) => {
+      if (!point) return;
+      let best: { id: string; d: number } | null = null;
+      for (const f of farms) {
+        if (f.centerLat == null || f.centerLng == null) continue;
+        const d =
+          (f.centerLat - point.lat) ** 2 + (f.centerLng - point.lng) ** 2;
+        if (!best || d < best.d) best = { id: f.id, d };
+      }
+      if (best) setStartFarmId((prev) => prev ?? best!.id);
+    });
+  };
+
+  const onStartVisit = async () => {
+    if (!startFarmId || !profile || starting) return;
+    setStarting(true);
+    try {
+      const point = await getCurrentPosition();
+      let newId = '';
+      await database.write(async () => {
+        const visit = await database.get<Visit>('visits').create((v) => {
+          v.farmId = startFarmId;
+          v.consultantId = profile.id;
+          v.name = visitName.trim() || null;
+          v.visitDate = new Date().toISOString().slice(0, 10);
+          v.status = 'open';
+          v.weather = null;
+          v.notes = null;
+          v.lat = point?.lat ?? null;
+          v.lng = point?.lng ?? null;
+        });
+        newId = visit.id;
+      });
+      void syncNow();
+      userChoseRef.current = true;
+      setSelectedVisitId(newId);
+      setStartOpen(false);
+      if (point) {
+        cameraRef.current?.flyTo({
+          center: [point.lng, point.lat],
+          zoom: 16,
+          duration: 600,
+        });
+      }
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  // ---- pin pendente (toque no mapa durante visita aberta) ------------------
+  const [pendingPin, setPendingPin] = useState<GeoPoint | null>(null);
+
+  const confirmPendingPin = () => {
+    if (!pendingPin || !selectedVisitId) return;
+    const { lat, lng } = pendingPin;
+    setPendingPin(null);
+    router.push(
+      `/visit/${selectedVisitId}/new-observation?lat=${lat}&lng=${lng}` as Href,
+    );
+  };
 
   /** Pins: só da visita selecionada, na ordem de criação (numerados). */
   const pins = useMemo(() => {
@@ -193,7 +287,9 @@ export default function MapScreen() {
   };
 
   const visitLabel = (v: Visit) =>
-    `${farmById.get(v.farmId)?.name ?? 'Fazenda'} · ${formatVisitDate(v.visitDate)}`;
+    v.name?.trim()
+      ? v.name
+      : `${farmById.get(v.farmId)?.name ?? 'Fazenda'} · ${formatVisitDate(v.visitDate)}`;
 
   return (
     <View style={styles.root}>
@@ -201,9 +297,19 @@ export default function MapScreen() {
         style={styles.map}
         mapStyle={satelliteStyle}
         attributionPosition={{ bottom: 8, left: 8 }}
-        onPress={() => {
+        onPress={(e) => {
           setSelectedObsId(null);
-          setMenuOpen(false);
+          if (menuOpen) {
+            setMenuOpen(false);
+            return;
+          }
+          // Durante uma visita aberta, o toque propõe um pin de observação.
+          if (selectedIsOpen) {
+            const [lng, lat] = e.nativeEvent.lngLat;
+            setPendingPin({ lat, lng });
+          } else {
+            setPendingPin(null);
+          }
         }}
       >
         <Camera
@@ -251,34 +357,71 @@ export default function MapScreen() {
             </Marker>
           );
         })}
+
+        {pendingPin ? (
+          <Marker
+            lngLat={[pendingPin.lng, pendingPin.lat]}
+            anchor="bottom"
+          >
+            <MaterialCommunityIcons
+              name="map-marker-plus"
+              size={38}
+              color="#FFD54F"
+              style={styles.ghostPin}
+            />
+          </Marker>
+        ) : null}
       </MapLibreMap>
 
       {/* ---- seletor de visita (recolhível) ---- */}
       <View style={styles.menuWrap}>
-        <TouchableRipple
-          style={styles.menuPill}
-          borderless
-          onPress={() => setMenuOpen((v) => !v)}
-        >
-          <View style={styles.menuPillInner}>
-            <MaterialCommunityIcons
-              name="clipboard-text-outline"
-              size={16}
-              color={palette.green}
-            />
-            <Text variant="labelMedium" style={styles.menuPillText} numberOfLines={1}>
-              {selectedVisit ? visitLabel(selectedVisit) : 'Escolher visita'}
-            </Text>
-            {selectedVisit?.status === 'open' ? (
-              <View style={styles.openDot} />
-            ) : null}
-            <MaterialCommunityIcons
-              name={menuOpen ? 'chevron-up' : 'chevron-down'}
-              size={18}
-              color={palette.textMuted}
-            />
-          </View>
-        </TouchableRipple>
+        <View style={styles.menuRow0}>
+          <TouchableRipple
+            style={styles.menuPill}
+            borderless
+            onPress={() => setMenuOpen((v) => !v)}
+          >
+            <View style={styles.menuPillInner}>
+              <MaterialCommunityIcons
+                name="clipboard-text-outline"
+                size={16}
+                color={palette.green}
+              />
+              <Text variant="labelMedium" style={styles.menuPillText} numberOfLines={1}>
+                {selectedVisit ? visitLabel(selectedVisit) : 'Escolher visita'}
+              </Text>
+              {selectedVisit?.status === 'open' ? (
+                <View style={styles.openDot} />
+              ) : null}
+              <MaterialCommunityIcons
+                name={menuOpen ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={palette.textMuted}
+              />
+            </View>
+          </TouchableRipple>
+
+          {selectedVisit ? (
+            <TouchableRipple
+              style={styles.editPill}
+              borderless
+              onPress={() =>
+                router.push(`/visit/${selectedVisit.id}` as Href)
+              }
+            >
+              <View style={styles.menuPillInner}>
+                <MaterialCommunityIcons
+                  name="pencil-outline"
+                  size={16}
+                  color={palette.green}
+                />
+                <Text variant="labelMedium" style={styles.menuPillText}>
+                  {selectedIsOpen ? 'Editar visita' : 'Ver visita'}
+                </Text>
+              </View>
+            </TouchableRipple>
+          ) : null}
+        </View>
 
         {menuOpen ? (
           <View style={styles.menuCard}>
@@ -349,10 +492,46 @@ export default function MapScreen() {
             </Text>
           </View>
         ) : null}
+        {selectedIsOpen && pins.length === 0 && !pendingPin && !menuOpen ? (
+          <View style={styles.hintPill}>
+            <Text variant="labelSmall" style={styles.hintText}>
+              Toque no mapa para marcar uma observação
+            </Text>
+          </View>
+        ) : null}
       </View>
 
+      {/* ---- confirmação do pin pendente ---- */}
+      {pendingPin ? (
+        <View style={styles.infoCard}>
+          <View style={styles.infoHeader}>
+            <MaterialCommunityIcons
+              name="map-marker-plus"
+              size={26}
+              color={palette.amber}
+            />
+            <View style={styles.infoTitleBox}>
+              <Text variant="titleMedium" style={styles.infoTitle}>
+                Registrar observação aqui?
+              </Text>
+              <Text variant="bodySmall" style={styles.muted}>
+                {formatGeoPoint(pendingPin)}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.confirmButtons}>
+            <Button mode="text" onPress={() => setPendingPin(null)}>
+              Cancelar
+            </Button>
+            <Button mode="contained" icon="plus" onPress={confirmPendingPin}>
+              Registrar
+            </Button>
+          </View>
+        </View>
+      ) : null}
+
       {/* ---- card de detalhes do pin ---- */}
-      {selectedObs ? (
+      {selectedObs && !pendingPin ? (
         <View style={styles.infoCard}>
           <View style={styles.infoHeader}>
             <View
@@ -436,6 +615,63 @@ export default function MapScreen() {
         color={palette.green}
         onPress={() => void recenter()}
       />
+
+      {!openVisit ? (
+        <FAB
+          icon="plus"
+          label="Nova visita"
+          color="#fff"
+          style={styles.newVisitFab}
+          onPress={openStartDialog}
+        />
+      ) : null}
+
+      {/* ---- diálogo de nova visita ---- */}
+      <Portal>
+        <Dialog visible={startOpen} onDismiss={() => setStartOpen(false)}>
+          <Dialog.Title>Nova visita</Dialog.Title>
+          <Dialog.Content style={styles.dialogContent}>
+            <TextInput
+              label="Nome da visita (opcional)"
+              placeholder="Ex.: Monitoramento semanal"
+              value={visitName}
+              onChangeText={setVisitName}
+              mode="outlined"
+            />
+            <Text variant="labelLarge">Fazenda *</Text>
+            {farms.length === 0 ? (
+              <Text variant="bodySmall" style={styles.muted}>
+                Nenhuma fazenda disponível (sincronize para carregar).
+              </Text>
+            ) : (
+              <ScrollView style={styles.dialogFarms}>
+                <View style={styles.dialogChips}>
+                  {farms.map((f) => (
+                    <Chip
+                      key={f.id}
+                      selected={startFarmId === f.id}
+                      showSelectedCheck
+                      onPress={() => setStartFarmId(f.id)}
+                    >
+                      {f.name}
+                    </Chip>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setStartOpen(false)}>Cancelar</Button>
+            <Button
+              loading={starting}
+              disabled={!startFarmId || starting}
+              onPress={onStartVisit}
+            >
+              Iniciar
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 }
@@ -473,12 +709,24 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 8,
   },
+  menuRow0: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    maxWidth: '100%',
+  },
   menuPill: {
     backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    maxWidth: '100%',
+    flexShrink: 1,
+  },
+  editPill: {
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   menuPillInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   menuPillText: { fontWeight: '700', flexShrink: 1 },
@@ -547,4 +795,23 @@ const styles = StyleSheet.create({
     bottom: 16,
     backgroundColor: '#fff',
   },
+  newVisitFab: {
+    position: 'absolute',
+    left: 16,
+    bottom: 16,
+    backgroundColor: palette.green,
+  },
+  ghostPin: {
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowRadius: 4,
+    textShadowOffset: { width: 0, height: 1 },
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  dialogContent: { gap: 10 },
+  dialogFarms: { maxHeight: 220 },
+  dialogChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });
