@@ -31,7 +31,7 @@ import { useChildren, useCollection } from '@/db/useCollection';
 import { fieldsToFeatureCollection, parseBoundary } from '@/lib/boundaries';
 import { formatGeoPoint, getCurrentPosition, type GeoPoint } from '@/lib/location';
 import { BRAZIL_CENTER, satelliteStyle } from '@/lib/mapStyle';
-import { persistPhoto } from '@/lib/photos';
+import { deleteLocalPhoto, persistPhoto } from '@/lib/photos';
 import { SEVERITY_LABELS, SEVERITY_LEVELS } from '@/lib/severity';
 import { palette } from '@/lib/theme';
 import { useSync } from '@/sync/SyncProvider';
@@ -39,15 +39,17 @@ import { useSync } from '@/sync/SyncProvider';
 type ThreatKind = 'pest' | 'disease';
 
 export default function NewObservationScreen() {
-  const { id, lat: latParam, lng: lngParam } = useLocalSearchParams<{
+  const { id, lat: latParam, lng: lngParam, obsId } = useLocalSearchParams<{
     id: string;
     lat?: string;
     lng?: string;
+    obsId?: string;
   }>();
   const router = useRouter();
   const { syncNow } = useSync();
   const insets = useSafeAreaInsets();
   const visitId = id ?? '';
+  const isEditing = !!obsId;
 
   // Ponto pré-fixado (fluxo "toque no mapa da visita"): vem por parâmetro.
   const paramPin = useMemo<GeoPoint | null>(() => {
@@ -57,10 +59,19 @@ export default function NewObservationScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Ponto escolhido no mapa da visita = só pré-visualização (não move o pin).
+  const previewOnly = !!paramPin && !isEditing;
+
   const visit = useChildren<Visit>('visits', 'id', visitId)[0];
   const farm = useChildren<Farm>('farms', 'id', visit?.farmId ?? '')[0];
   const fields = useChildren<Field>('fields', 'farm_id', visit?.farmId ?? '');
   const threats = useCollection<Threat>('threats');
+  const editing = useChildren<Observation>('observations', 'id', obsId ?? '')[0];
+  const existingPhotos = useChildren<ObservationPhoto>(
+    'observation_photos',
+    'observation_id',
+    obsId ?? '',
+  );
 
   const [fieldId, setFieldId] = useState<string | null>(null);
   const [threatKind, setThreatKind] = useState<ThreatKind>('pest');
@@ -69,7 +80,12 @@ export default function NewObservationScreen() {
   const [incidence, setIncidence] = useState('');
   const [notes, setNotes] = useState('');
   const [photoUris, setPhotoUris] = useState<string[]>([]);
+  const [removedPhotoIds, setRemovedPhotoIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const keptExistingPhotos = existingPhotos.filter(
+    (p) => p.localUri && !removedPhotoIds.includes(p.id),
+  );
 
   // Pin do local da observação: se veio pré-fixado do mapa usa ele; senão
   // começa na posição GPS assim que houver fix. O consultor pode ajustar
@@ -83,11 +99,39 @@ export default function NewObservationScreen() {
   // carregam do banco (uma vez só).
   const autoFieldDone = useRef(false);
   useEffect(() => {
-    if (autoFieldDone.current || !paramPin || fields.length === 0) return;
+    if (autoFieldDone.current || !paramPin || isEditing || fields.length === 0)
+      return;
     autoFieldDone.current = true;
     autoSelectField(paramPin);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields.length]);
+
+  // Modo edição: preenche o formulário quando o registro (e o catálogo,
+  // se a observação tem ameaça) carregam. Roda uma vez só.
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!isEditing || prefilled.current || !editing) return;
+    if (editing.threatId && threats.length === 0) return; // espera o catálogo
+    prefilled.current = true;
+    setFieldId(editing.fieldId);
+    if (editing.threatId) {
+      const threat = threats.find((t) => t.id === editing.threatId);
+      if (threat) {
+        setThreatKind(threat.type === 'disease' ? 'disease' : 'pest');
+        setThreatId(threat.id);
+      }
+    }
+    setSeverity(editing.severity);
+    setIncidence(editing.incidence != null ? String(editing.incidence) : '');
+    setNotes(editing.notes ?? '');
+    if (editing.lat != null && editing.lng != null) {
+      const point = { lat: editing.lat, lng: editing.lng };
+      pinWasAdjusted.current = true;
+      setPin(point);
+      setLocating(false);
+      cameraRef.current?.jumpTo({ center: [point.lng, point.lat], zoom: 17 });
+    }
+  }, [isEditing, editing, threats]);
 
   const initialCenter = useMemo<[number, number]>(() => {
     if (farm?.centerLat != null && farm?.centerLng != null) {
@@ -180,8 +224,12 @@ export default function NewObservationScreen() {
   };
 
   // Basta ter algo registrado: ameaça, nota ou foto.
-  const hasContent = !!threatId || notes.trim().length > 0 || photoUris.length > 0;
-  const canSave = !!visit && hasContent && !saving;
+  const hasContent =
+    !!threatId ||
+    notes.trim().length > 0 ||
+    photoUris.length > 0 ||
+    keptExistingPhotos.length > 0;
+  const canSave = !!visit && hasContent && !saving && (!isEditing || !!editing);
 
   const onSave = async () => {
     if (!canSave || !visit) return;
@@ -197,19 +245,35 @@ export default function NewObservationScreen() {
       }
 
       const parsedIncidence = parseFloat(incidence.replace(',', '.'));
+      const applyFields = (o: Observation) => {
+        o.fieldId = fieldId;
+        o.threatId = threatId;
+        o.severity = severity;
+        o.incidence = Number.isFinite(parsedIncidence)
+          ? Math.min(100, Math.max(0, parsedIncidence))
+          : null;
+        o.notes = notes.trim() || null;
+        o.lat = point?.lat ?? null;
+        o.lng = point?.lng ?? null;
+      };
+
+      const removed = existingPhotos.filter((p) =>
+        removedPhotoIds.includes(p.id),
+      );
       await database.write(async () => {
-        const obs = await database.get<Observation>('observations').create((o) => {
-          o.visitId = visit.id;
-          o.fieldId = fieldId;
-          o.threatId = threatId;
-          o.severity = severity;
-          o.incidence = Number.isFinite(parsedIncidence)
-            ? Math.min(100, Math.max(0, parsedIncidence))
-            : null;
-          o.notes = notes.trim() || null;
-          o.lat = point?.lat ?? null;
-          o.lng = point?.lng ?? null;
-        });
+        let obs: Observation;
+        if (isEditing && editing) {
+          await editing.update(applyFields);
+          obs = editing;
+          for (const p of removed) {
+            await p.markAsDeleted();
+          }
+        } else {
+          obs = await database.get<Observation>('observations').create((o) => {
+            o.visitId = visit.id;
+            applyFields(o);
+          });
+        }
         for (const localUri of persistedUris) {
           await database.get<ObservationPhoto>('observation_photos').create((p) => {
             p.observationId = obs.id;
@@ -221,6 +285,9 @@ export default function NewObservationScreen() {
           });
         }
       });
+      for (const p of removed) {
+        if (p.localUri) deleteLocalPhoto(p.localUri);
+      }
       void syncNow();
       router.back();
     } catch (e) {
@@ -234,7 +301,9 @@ export default function NewObservationScreen() {
     <View style={styles.root}>
       <Appbar.Header>
         <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Nova observação" />
+        <Appbar.Content
+          title={isEditing ? 'Editar observação' : 'Nova observação'}
+        />
       </Appbar.Header>
 
       <ScrollView
@@ -245,19 +314,25 @@ export default function NewObservationScreen() {
       >
         <Text variant="labelLarge">Local da observação</Text>
         <Text variant="bodySmall" style={styles.muted}>
-          Toque no mapa para fixar o pin no ponto observado.
+          {previewOnly
+            ? 'Ponto escolhido no mapa da visita (pré-visualização).'
+            : 'Toque no mapa para fixar o pin no ponto observado.'}
         </Text>
         <View style={styles.mapBox}>
           <MapLibreMap
             style={styles.map}
             mapStyle={satelliteStyle}
             attributionPosition={{ bottom: 4, left: 4 }}
-            onPress={(e) => {
-              const [lng, lat] = e.nativeEvent.lngLat;
-              pinWasAdjusted.current = true;
-              setPin({ lat, lng });
-              autoSelectField({ lat, lng });
-            }}
+            onPress={
+              previewOnly
+                ? undefined
+                : (e) => {
+                    const [lng, lat] = e.nativeEvent.lngLat;
+                    pinWasAdjusted.current = true;
+                    setPin({ lat, lng });
+                    autoSelectField({ lat, lng });
+                  }
+            }
           >
             <Camera
               ref={cameraRef}
@@ -292,15 +367,17 @@ export default function NewObservationScreen() {
                 ? 'Buscando sinal de GPS…'
                 : 'Toque no mapa para marcar o ponto'}
           </Chip>
-          <Button
-            mode="text"
-            icon="crosshairs-gps"
-            compact
-            loading={locating}
-            onPress={() => void centerOnMyPosition()}
-          >
-            Minha posição
-          </Button>
+          {!previewOnly ? (
+            <Button
+              mode="text"
+              icon="crosshairs-gps"
+              compact
+              loading={locating}
+              onPress={() => void centerOnMyPosition()}
+            >
+              Minha posição
+            </Button>
+          ) : null}
         </View>
 
         <Text variant="labelLarge" style={styles.label}>
@@ -390,7 +467,7 @@ export default function NewObservationScreen() {
         />
 
         <Text variant="labelLarge" style={styles.label}>
-          Fotos ({photoUris.length})
+          Fotos ({keptExistingPhotos.length + photoUris.length})
         </Text>
         <View style={styles.photoButtons}>
           <Button mode="outlined" icon="camera" onPress={addFromCamera}>
@@ -400,8 +477,25 @@ export default function NewObservationScreen() {
             Galeria
           </Button>
         </View>
-        {photoUris.length > 0 ? (
+        {keptExistingPhotos.length > 0 || photoUris.length > 0 ? (
           <ScrollView horizontal contentContainerStyle={styles.photoRow}>
+            {keptExistingPhotos.map((p) => (
+              <View key={p.id} style={styles.photoWrap}>
+                <Image
+                  source={{ uri: p.localUri! }}
+                  style={styles.photo}
+                  contentFit="cover"
+                />
+                <IconButton
+                  icon="close-circle"
+                  size={20}
+                  style={styles.photoRemove}
+                  onPress={() =>
+                    setRemovedPhotoIds((prev) => [...prev, p.id])
+                  }
+                />
+              </View>
+            ))}
             {photoUris.map((uri) => (
               <View key={uri} style={styles.photoWrap}>
                 <Image source={{ uri }} style={styles.photo} contentFit="cover" />
@@ -423,7 +517,7 @@ export default function NewObservationScreen() {
           disabled={!canSave}
           style={styles.button}
         >
-          Salvar observação
+          {isEditing ? 'Salvar alterações' : 'Salvar observação'}
         </Button>
       </ScrollView>
     </View>

@@ -8,6 +8,7 @@ import {
   Chip,
   Dialog,
   FAB,
+  IconButton,
   Portal,
   Text,
   TextInput,
@@ -26,6 +27,7 @@ import type {
 } from '@/db/models';
 import { useChildren, useCollection } from '@/db/useCollection';
 import { formatVisitDate } from '@/lib/dates';
+import { deleteLocalPhoto } from '@/lib/photos';
 import { SEVERITY_LABELS } from '@/lib/severity';
 import { palette } from '@/lib/theme';
 import { shareVisitReport } from '@/reports/visitReport';
@@ -67,6 +69,39 @@ export default function VisitDetailScreen() {
   const [sharing, setSharing] = useState(false);
 
   const isOpen = visit?.status === 'open';
+
+  const deleteObservation = async (obs: Observation) => {
+    const obsPhotos = photosByObs.get(obs.id) ?? [];
+    try {
+      await database.write(async () => {
+        for (const p of obsPhotos) {
+          await p.markAsDeleted();
+        }
+        await obs.markAsDeleted();
+      });
+      for (const p of obsPhotos) {
+        if (p.localUri) deleteLocalPhoto(p.localUri);
+      }
+      void syncNow();
+    } catch (e) {
+      Alert.alert('Observação', `Não foi possível excluir: ${String(e)}`);
+    }
+  };
+
+  const confirmDeleteObservation = (obs: Observation, title: string) => {
+    Alert.alert(
+      'Excluir observação',
+      `"${title}" e suas fotos serão removidos. Essa ação não pode ser desfeita.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => void deleteObservation(obs),
+        },
+      ],
+    );
+  };
 
   const onCloseVisit = async () => {
     if (!visit || closing) return;
@@ -242,10 +277,11 @@ export default function VisitDetailScreen() {
           ]
             .filter(Boolean)
             .join(' · ');
+          const title = threat?.name ?? 'Observação geral';
           return (
             <Card mode="elevated" style={styles.card}>
               <Card.Title
-                title={threat?.name ?? 'Observação geral'}
+                title={title}
                 subtitle={
                   [
                     threat
@@ -257,6 +293,29 @@ export default function VisitDetailScreen() {
                   ]
                     .filter(Boolean)
                     .join(' · ') || undefined
+                }
+                right={(props) =>
+                  isOpen ? (
+                    <View style={styles.cardActions}>
+                      <IconButton
+                        {...props}
+                        icon="pencil-outline"
+                        size={20}
+                        onPress={() =>
+                          router.push(
+                            `/visit/${visitId}/new-observation?obsId=${item.id}` as Href,
+                          )
+                        }
+                      />
+                      <IconButton
+                        {...props}
+                        icon="delete-outline"
+                        size={20}
+                        iconColor={palette.red}
+                        onPress={() => confirmDeleteObservation(item, title)}
+                      />
+                    </View>
+                  ) : null
                 }
               />
               {details || item.notes ? (
@@ -325,6 +384,7 @@ const styles = StyleSheet.create({
   sectionTitle: { marginTop: 8, fontWeight: '700' },
   muted: { color: palette.textMuted },
   card: { borderRadius: 16 },
+  cardActions: { flexDirection: 'row', marginRight: 4 },
   cardContent: { gap: 4, paddingBottom: 12 },
   empty: { textAlign: 'center', marginTop: 32, color: palette.textMuted },
   footer: { marginTop: 16, gap: 8 },

@@ -11,6 +11,7 @@ import { useRouter, type Href } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import {
+  ActivityIndicator,
   Button,
   Chip,
   Dialog,
@@ -38,6 +39,7 @@ import { fieldsToFeatureCollection } from '@/lib/boundaries';
 import { formatVisitDate } from '@/lib/dates';
 import { formatGeoPoint, getCurrentPosition, type GeoPoint } from '@/lib/location';
 import { BRAZIL_CENTER, satelliteStyle } from '@/lib/mapStyle';
+import { deleteLocalPhoto } from '@/lib/photos';
 import { SEVERITY_LABELS } from '@/lib/severity';
 import { palette } from '@/lib/theme';
 import { useSync } from '@/sync/SyncProvider';
@@ -173,6 +175,19 @@ export default function MapScreen() {
     }
   };
 
+  // O MapLibre pode demorar a carregar o estilo na 1ª abertura; interagir
+  // nesse meio-tempo crashava. Overlay bloqueia toques até o mapa avisar que
+  // terminou (com fallback de 12s caso o evento não chegue).
+  const [mapLoaded, setMapLoaded] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMapLoaded(true), 12000);
+    return () => clearTimeout(t);
+  }, []);
+
+  // ---- excluir observação (pelo card do pin) --------------------------------
+  const [deleteObsOpen, setDeleteObsOpen] = useState(false);
+  const [deletingObs, setDeletingObs] = useState(false);
+
   // ---- encerrar visita direto do mapa --------------------------------------
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [closingVisit, setClosingVisit] = useState(false);
@@ -258,6 +273,30 @@ export default function MapScreen() {
     ? (photosByObs.get(selectedObs.id) ?? []).filter((p) => p.localUri)
     : [];
 
+  const onDeleteObservation = async () => {
+    if (!selectedObs || deletingObs) return;
+    setDeletingObs(true);
+    try {
+      const obsPhotos = photosByObs.get(selectedObs.id) ?? [];
+      await database.write(async () => {
+        for (const p of obsPhotos) {
+          await p.markAsDeleted();
+        }
+        await selectedObs.markAsDeleted();
+      });
+      for (const p of obsPhotos) {
+        if (p.localUri) deleteLocalPhoto(p.localUri);
+      }
+      setDeleteObsOpen(false);
+      setSelectedObsId(null);
+      void syncNow();
+    } catch (e) {
+      Alert.alert('Observação', `Não foi possível excluir: ${String(e)}`);
+    } finally {
+      setDeletingObs(false);
+    }
+  };
+
   // ---- câmera ---------------------------------------------------------------
   const initialCenter = useMemo<[number, number]>(() => {
     const farm = farms.find((f) => f.centerLat != null && f.centerLng != null);
@@ -287,8 +326,10 @@ export default function MapScreen() {
     );
   };
 
-  // Ao trocar a visita: enquadra os pins; sem pins/seleção, centra no usuário.
+  // Ao trocar a visita (e após o mapa carregar): enquadra os pins;
+  // sem pins/seleção, centra no usuário.
   useEffect(() => {
+    if (!mapLoaded) return;
     let cancelled = false;
     if (pins.length > 0) {
       // pequeno delay p/ o mapa montar a câmera antes do fit
@@ -304,7 +345,7 @@ export default function MapScreen() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedVisitId]);
+  }, [selectedVisitId, mapLoaded]);
 
   const recenter = async () => {
     const point = await getCurrentPosition();
@@ -335,6 +376,7 @@ export default function MapScreen() {
         style={styles.map}
         mapStyle={satelliteStyle}
         attributionPosition={{ bottom: 8, left: 8 }}
+        onDidFinishLoadingMap={() => setMapLoaded(true)}
         onPress={(e) => {
           // toque que veio de um pin (o Marker também propaga pro mapa)
           if (Date.now() - markerPressedAt.current < 300) return;
@@ -364,9 +406,9 @@ export default function MapScreen() {
           }}
         />
         <UserLocation />
-        <FieldPolygons features={fieldPolygons} />
+        {mapLoaded ? <FieldPolygons features={fieldPolygons} /> : null}
 
-        {farms
+        {mapLoaded && farms
           .filter((f) => f.centerLat != null && f.centerLng != null)
           .map((f) => (
             <Marker
@@ -380,7 +422,7 @@ export default function MapScreen() {
             </Marker>
           ))}
 
-        {pins.map((o, index) => {
+        {mapLoaded && pins.map((o, index) => {
           const threat = o.threatId ? threatById.get(o.threatId) : null;
           const isSelected = o.id === selectedObsId;
           return (
@@ -402,7 +444,7 @@ export default function MapScreen() {
           );
         })}
 
-        {pendingPin ? (
+        {mapLoaded && pendingPin ? (
           <Marker
             lngLat={[pendingPin.lng, pendingPin.lat]}
             anchor="bottom"
@@ -674,6 +716,32 @@ export default function MapScreen() {
               ))}
             </ScrollView>
           ) : null}
+
+          {selectedIsOpen ? (
+            <View style={styles.confirmButtons}>
+              <Button
+                mode="text"
+                icon="delete-outline"
+                textColor={palette.red}
+                onPress={() => setDeleteObsOpen(true)}
+              >
+                Excluir
+              </Button>
+              <Button
+                mode="outlined"
+                icon="pencil-outline"
+                onPress={() => {
+                  const obsId = selectedObs.id;
+                  setSelectedObsId(null);
+                  router.push(
+                    `/visit/${selectedObs.visitId}/new-observation?obsId=${obsId}` as Href,
+                  );
+                }}
+              >
+                Editar
+              </Button>
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -695,7 +763,42 @@ export default function MapScreen() {
         />
       ) : null}
 
+      {/* ---- carregando: bloqueia interação até o estilo do mapa terminar ---- */}
+      {!mapLoaded ? (
+        <View style={styles.loadingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={palette.green} />
+          <Text variant="bodyMedium" style={styles.loadingText}>
+            Carregando mapa…
+          </Text>
+        </View>
+      ) : null}
+
       {/* ---- diálogos ---- */}
+      <Portal>
+        <Dialog
+          visible={deleteObsOpen}
+          onDismiss={() => setDeleteObsOpen(false)}
+        >
+          <Dialog.Title>Excluir observação</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">
+              O pin {selectedIndex + 1}
+              {selectedThreat ? ` (${selectedThreat.name})` : ''} e suas fotos
+              serão removidos. Essa ação não pode ser desfeita.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDeleteObsOpen(false)}>Cancelar</Button>
+            <Button
+              loading={deletingObs}
+              textColor={palette.red}
+              onPress={onDeleteObservation}
+            >
+              Excluir
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
       <Portal>
         <Dialog
           visible={closeConfirmOpen}
@@ -902,6 +1005,18 @@ const styles = StyleSheet.create({
     bottom: 16,
     backgroundColor: palette.green,
   },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: palette.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: { color: palette.textMuted },
   ghostPin: {
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowRadius: 4,
