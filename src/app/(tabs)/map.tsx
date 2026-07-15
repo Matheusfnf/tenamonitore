@@ -176,11 +176,17 @@ export default function MapScreen() {
   };
 
   // O MapLibre pode demorar a carregar o estilo na 1ª abertura; interagir
-  // nesse meio-tempo crashava. Overlay bloqueia toques até o mapa avisar que
-  // terminou (com fallback de 12s caso o evento não chegue).
+  // nesse meio-tempo crashava e o TextureView ainda mostrava o último frame
+  // renderizado (fazenda antiga). O overlay fica até o estilo carregar E a
+  // câmera fazer o 1º posicionamento (fit dos pins ou salto pro GPS) — com
+  // fallback de 12s caso os eventos não cheguem.
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [cameraPositioned, setCameraPositioned] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setMapLoaded(true), 12000);
+    const t = setTimeout(() => {
+      setMapLoaded(true);
+      setCameraPositioned(true);
+    }, 12000);
     return () => clearTimeout(t);
   }, []);
 
@@ -327,19 +333,24 @@ export default function MapScreen() {
   };
 
   // Ao trocar a visita (e após o mapa carregar): enquadra os pins;
-  // sem pins/seleção, centra no usuário.
+  // sem pins/seleção, centra no usuário. O 1º posicionamento libera o overlay.
   useEffect(() => {
     if (!mapLoaded) return;
     let cancelled = false;
     if (pins.length > 0) {
       // pequeno delay p/ o mapa montar a câmera antes do fit
-      const t = setTimeout(() => fitToPins(pins), 300);
+      const t = setTimeout(() => {
+        fitToPins(pins);
+        setCameraPositioned(true);
+      }, 300);
       return () => clearTimeout(t);
     }
     getCurrentPosition().then((point) => {
-      if (!cancelled && point) {
+      if (cancelled) return;
+      if (point) {
         cameraRef.current?.jumpTo({ center: [point.lng, point.lat], zoom: 15 });
       }
+      setCameraPositioned(true);
     });
     return () => {
       cancelled = true;
@@ -717,31 +728,29 @@ export default function MapScreen() {
             </ScrollView>
           ) : null}
 
-          {selectedIsOpen ? (
-            <View style={styles.confirmButtons}>
-              <Button
-                mode="text"
-                icon="delete-outline"
-                textColor={palette.red}
-                onPress={() => setDeleteObsOpen(true)}
-              >
-                Excluir
-              </Button>
-              <Button
-                mode="outlined"
-                icon="pencil-outline"
-                onPress={() => {
-                  const obsId = selectedObs.id;
-                  setSelectedObsId(null);
-                  router.push(
-                    `/visit/${selectedObs.visitId}/new-observation?obsId=${obsId}` as Href,
-                  );
-                }}
-              >
-                Editar
-              </Button>
-            </View>
-          ) : null}
+          <View style={styles.confirmButtons}>
+            <Button
+              mode="text"
+              icon="delete-outline"
+              textColor={palette.red}
+              onPress={() => setDeleteObsOpen(true)}
+            >
+              Excluir
+            </Button>
+            <Button
+              mode="outlined"
+              icon="pencil-outline"
+              onPress={() => {
+                const obsId = selectedObs.id;
+                setSelectedObsId(null);
+                router.push(
+                  `/visit/${selectedObs.visitId}/new-observation?obsId=${obsId}` as Href,
+                );
+              }}
+            >
+              Editar
+            </Button>
+          </View>
         </View>
       ) : null}
 
@@ -763,12 +772,12 @@ export default function MapScreen() {
         />
       ) : null}
 
-      {/* ---- carregando: bloqueia interação até o estilo do mapa terminar ---- */}
-      {!mapLoaded ? (
+      {/* ---- carregando: bloqueia até o estilo carregar e a câmera posicionar ---- */}
+      {!mapLoaded || !cameraPositioned ? (
         <View style={styles.loadingOverlay} pointerEvents="auto">
           <ActivityIndicator size="large" color={palette.green} />
           <Text variant="bodyMedium" style={styles.loadingText}>
-            Carregando mapa…
+            {mapLoaded ? 'Localizando…' : 'Carregando mapa…'}
           </Text>
         </View>
       ) : null}

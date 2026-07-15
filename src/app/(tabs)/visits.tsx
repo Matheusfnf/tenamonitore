@@ -1,18 +1,41 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Q } from '@nozbe/watermelondb';
 import { useRouter, type Href } from 'expo-router';
-import { useMemo } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
-import { FAB, Text, TouchableRipple } from 'react-native-paper';
+import { useMemo, useState } from 'react';
+import { Alert, FlatList, StyleSheet, View } from 'react-native';
+import {
+  Button,
+  Chip,
+  Dialog,
+  IconButton,
+  Portal,
+  Text,
+  TextInput,
+  TouchableRipple,
+} from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconBadge } from '@/components/IconBadge';
-import type { Farm, Observation, Visit } from '@/db/models';
+import { database } from '@/db';
+import type {
+  Farm,
+  Observation,
+  ObservationPhoto,
+  Recommendation,
+  Report,
+  Visit,
+} from '@/db/models';
 import { useCollection } from '@/db/useCollection';
 import { formatVisitDate } from '@/lib/dates';
+import { deleteLocalPhoto } from '@/lib/photos';
 import { palette } from '@/lib/theme';
+import { useSync } from '@/sync/SyncProvider';
+
+const WEATHER_OPTIONS = ['Ensolarado', 'Parcialmente nublado', 'Nublado', 'Chuvoso'];
 
 export default function VisitsScreen() {
   const router = useRouter();
+  const { syncNow } = useSync();
   const visits = useCollection<Visit>('visits');
   const farms = useCollection<Farm>('farms');
   const observations = useCollection<Observation>('observations');
@@ -35,6 +58,96 @@ export default function VisitsScreen() {
     [visits],
   );
 
+  // ---- editar dados da visita (nome/clima/notas — nunca localização) -------
+  const [editVisit, setEditVisit] = useState<Visit | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editWeather, setEditWeather] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEdit = (visit: Visit) => {
+    setEditName(visit.name ?? '');
+    setEditWeather(visit.weather);
+    setEditNotes(visit.notes ?? '');
+    setEditVisit(visit);
+  };
+
+  const onSaveEdit = async () => {
+    if (!editVisit || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      await database.write(async () => {
+        await editVisit.update((v) => {
+          v.name = editName.trim() || null;
+          v.weather = editWeather;
+          v.notes = editNotes.trim() || null;
+        });
+      });
+      setEditVisit(null);
+      void syncNow();
+    } catch (e) {
+      Alert.alert('Visita', `Não foi possível salvar: ${String(e)}`);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // ---- excluir visita (em cascata: observações, fotos, relatórios) ---------
+  const deleteVisit = async (visit: Visit) => {
+    try {
+      const obs = await database
+        .get<Observation>('observations')
+        .query(Q.where('visit_id', visit.id))
+        .fetch();
+      const obsIds = obs.map((o) => o.id);
+      const photos =
+        obsIds.length > 0
+          ? await database
+              .get<ObservationPhoto>('observation_photos')
+              .query(Q.where('observation_id', Q.oneOf(obsIds)))
+              .fetch()
+          : [];
+      const reports = await database
+        .get<Report>('reports')
+        .query(Q.where('visit_id', visit.id))
+        .fetch();
+      const recommendations = await database
+        .get<Recommendation>('recommendations')
+        .query(Q.where('visit_id', visit.id))
+        .fetch();
+
+      await database.write(async () => {
+        for (const p of photos) await p.markAsDeleted();
+        for (const o of obs) await o.markAsDeleted();
+        for (const r of reports) await r.markAsDeleted();
+        for (const r of recommendations) await r.markAsDeleted();
+        await visit.markAsDeleted();
+      });
+      for (const p of photos) {
+        if (p.localUri) deleteLocalPhoto(p.localUri);
+      }
+      void syncNow();
+    } catch (e) {
+      Alert.alert('Visita', `Não foi possível excluir: ${String(e)}`);
+    }
+  };
+
+  const confirmDelete = (visit: Visit, label: string) => {
+    const count = obsCountByVisit.get(visit.id) ?? 0;
+    Alert.alert(
+      'Excluir visita',
+      `"${label}" e suas ${count} observaç${count === 1 ? 'ão' : 'ões'} (com fotos) serão removidas. Essa ação não pode ser desfeita.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: () => void deleteVisit(visit),
+        },
+      ],
+    );
+  };
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
@@ -53,12 +166,12 @@ export default function VisitsScreen() {
         ListEmptyComponent={
           <View style={styles.emptyBox}>
             <MaterialCommunityIcons
-              name="clipboard-text-outline"
+              name="map-marker-path"
               size={44}
               color={palette.textMuted}
             />
             <Text style={styles.empty}>
-              Nenhuma visita ainda.{'\n'}Toque em “Nova visita” para começar.
+              Nenhuma visita ainda.{'\n'}Inicie uma visita pela aba Mapa.
             </Text>
           </View>
         }
@@ -66,6 +179,7 @@ export default function VisitsScreen() {
           const farm = farmById.get(item.farmId);
           const count = obsCountByVisit.get(item.id) ?? 0;
           const open = item.status === 'open';
+          const label = item.name?.trim() || (farm?.name ?? 'Fazenda');
           return (
             <TouchableRipple
               style={styles.card}
@@ -80,7 +194,7 @@ export default function VisitsScreen() {
                 />
                 <View style={styles.cardTexts}>
                   <Text variant="titleMedium" style={styles.cardTitle}>
-                    {item.name?.trim() || (farm?.name ?? 'Fazenda')}
+                    {label}
                   </Text>
                   <Text variant="bodySmall" style={styles.muted}>
                     {item.name?.trim() ? `${farm?.name ?? 'Fazenda'} · ` : ''}
@@ -108,24 +222,66 @@ export default function VisitsScreen() {
                     </Text>
                   </View>
                 </View>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={24}
-                  color={palette.textMuted}
-                />
+                <View style={styles.cardActions}>
+                  <IconButton
+                    icon="pencil-outline"
+                    size={20}
+                    onPress={() => openEdit(item)}
+                  />
+                  <IconButton
+                    icon="delete-outline"
+                    size={20}
+                    iconColor={palette.red}
+                    onPress={() => confirmDelete(item, label)}
+                  />
+                </View>
               </View>
             </TouchableRipple>
           );
         }}
       />
 
-      <FAB
-        icon="plus"
-        label="Nova visita"
-        style={styles.fab}
-        color="#fff"
-        onPress={() => router.push('/visit/new' as Href)}
-      />
+      <Portal>
+        <Dialog visible={!!editVisit} onDismiss={() => setEditVisit(null)}>
+          <Dialog.Title>Editar visita</Dialog.Title>
+          <Dialog.Content style={styles.dialogContent}>
+            <TextInput
+              label="Nome da visita"
+              value={editName}
+              onChangeText={setEditName}
+              mode="outlined"
+            />
+            <Text variant="labelLarge">Clima</Text>
+            <View style={styles.chips}>
+              {WEATHER_OPTIONS.map((w) => (
+                <Chip
+                  key={w}
+                  compact
+                  selected={editWeather === w}
+                  showSelectedCheck
+                  onPress={() => setEditWeather(editWeather === w ? null : w)}
+                >
+                  {w}
+                </Chip>
+              ))}
+            </View>
+            <TextInput
+              label="Observações gerais"
+              value={editNotes}
+              onChangeText={setEditNotes}
+              mode="outlined"
+              multiline
+              numberOfLines={3}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setEditVisit(null)}>Cancelar</Button>
+            <Button loading={savingEdit} onPress={onSaveEdit}>
+              Salvar
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -135,7 +291,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 16, gap: 2 },
   title: { fontWeight: '800' },
   muted: { color: palette.textMuted },
-  list: { padding: 20, gap: 12, paddingBottom: 96 },
+  list: { padding: 20, gap: 12, paddingBottom: 32 },
   card: {
     backgroundColor: palette.surface,
     borderRadius: 16,
@@ -143,9 +299,10 @@ const styles = StyleSheet.create({
     borderColor: palette.outline,
     padding: 14,
   },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   cardTexts: { flex: 1, gap: 2 },
   cardTitle: { fontWeight: '700' },
+  cardActions: { flexDirection: 'row' },
   statusPill: {
     alignSelf: 'flex-start',
     borderRadius: 999,
@@ -155,10 +312,6 @@ const styles = StyleSheet.create({
   },
   emptyBox: { alignItems: 'center', marginTop: 48, gap: 12 },
   empty: { textAlign: 'center', color: palette.textMuted },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
-    backgroundColor: palette.green,
-  },
+  dialogContent: { gap: 10 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

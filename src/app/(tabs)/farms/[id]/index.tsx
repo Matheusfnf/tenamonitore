@@ -255,15 +255,7 @@ export default function FarmDetailScreen() {
           style={styles.fab}
           onPress={() => router.push(`/farms/${farmId}/new-field` as Href)}
         />
-      ) : (
-        <FAB
-          icon="clipboard-plus-outline"
-          label="Nova visita"
-          color="#fff"
-          style={styles.fab}
-          onPress={() => router.push(`/visit/new?farmId=${farmId}` as Href)}
-        />
-      )}
+      ) : null}
     </View>
   );
 }

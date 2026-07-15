@@ -7,7 +7,6 @@ import {
   Card,
   Chip,
   Dialog,
-  FAB,
   IconButton,
   Portal,
   Text,
@@ -233,7 +232,7 @@ export default function VisitDetailScreen() {
         ListEmptyComponent={
           <Text style={styles.empty}>
             {isOpen
-              ? 'Nenhuma observação ainda. Fixe um pin no mapa e registre o que encontrar.'
+              ? 'Nenhuma observação ainda. Toque num ponto do mapa para registrar.'
               : 'Visita encerrada sem observações.'}
           </Text>
         }
@@ -294,29 +293,27 @@ export default function VisitDetailScreen() {
                     .filter(Boolean)
                     .join(' · ') || undefined
                 }
-                right={(props) =>
-                  isOpen ? (
-                    <View style={styles.cardActions}>
-                      <IconButton
-                        {...props}
-                        icon="pencil-outline"
-                        size={20}
-                        onPress={() =>
-                          router.push(
-                            `/visit/${visitId}/new-observation?obsId=${item.id}` as Href,
-                          )
-                        }
-                      />
-                      <IconButton
-                        {...props}
-                        icon="delete-outline"
-                        size={20}
-                        iconColor={palette.red}
-                        onPress={() => confirmDeleteObservation(item, title)}
-                      />
-                    </View>
-                  ) : null
-                }
+                right={(props) => (
+                  <View style={styles.cardActions}>
+                    <IconButton
+                      {...props}
+                      icon="pencil-outline"
+                      size={20}
+                      onPress={() =>
+                        router.push(
+                          `/visit/${visitId}/new-observation?obsId=${item.id}` as Href,
+                        )
+                      }
+                    />
+                    <IconButton
+                      {...props}
+                      icon="delete-outline"
+                      size={20}
+                      iconColor={palette.red}
+                      onPress={() => confirmDeleteObservation(item, title)}
+                    />
+                  </View>
+                )}
               />
               {details || item.notes ? (
                 <Card.Content style={styles.cardContent}>
@@ -332,18 +329,6 @@ export default function VisitDetailScreen() {
           );
         }}
       />
-
-      {isOpen && (
-        <FAB
-          icon="plus"
-          label="Observação"
-          color="#fff"
-          style={[styles.fab, { bottom: 16 + insets.bottom }]}
-          onPress={() =>
-            router.push(`/visit/${visitId}/new-observation` as Href)
-          }
-        />
-      )}
 
       <Portal>
         <Dialog
