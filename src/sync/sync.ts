@@ -16,6 +16,10 @@ interface PullResult {
 export async function runSync(): Promise<void> {
   await synchronize({
     database,
+    // O sync_pull (migração 0004) entrega TUDO no bucket `updated` — este
+    // flag diz ao WatermelonDB que isso é intencional: registros
+    // desconhecidos são criados sem o diagnostic "doesn't exist locally".
+    sendCreatedAsUpdated: true,
     pullChanges: async ({ lastPulledAt }) => {
       const { data, error } = await supabase.rpc('sync_pull', {
         last_pulled_at: lastPulledAt ?? 0,
