@@ -19,19 +19,24 @@ Passo a passo do zero até os testers instalando pelo link da Play Store.
    `EXPO_PUBLIC_MAPTILER_KEY=...`. Sem a chave o app usa o satélite do Esri
    (ok para desenvolvimento).
 
-## 1. Variáveis de ambiente na EAS
+## 1. Variáveis de ambiente (já no eas.json)
 
-O build na nuvem não lê seu `.env` local. Cadastre as variáveis do projeto em
-https://expo.dev → seu projeto → **Environment variables** (ou via CLI):
+**O build na nuvem NÃO lê seu `.env` local** — foi o que fez o primeiro AAB
+sair sem Supabase e quebrar com "CLEARTEXT to localhost". Para não depender de
+memória, as variáveis públicas ficam versionadas em `eas.json`, no bloco `env`
+de cada perfil (`development`/`preview`/`production`). Todo build já sai com
+elas — nada a fazer aqui.
 
-```
-eas env:create --name EXPO_PUBLIC_SUPABASE_URL --value https://SEU-PROJETO.supabase.co --environment production --visibility plaintext
-eas env:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value SUA-ANON-KEY --environment production --visibility plaintext
-eas env:create --name EXPO_PUBLIC_MAPTILER_KEY --value SUA-CHAVE --environment production --visibility plaintext
-```
+Isso é seguro: `EXPO_PUBLIC_*` são embutidas no bundle de qualquer app
+publicado (extraíveis do APK); a anon key do Supabase é pública por design e a
+segurança vem do RLS. Ao trocar de projeto Supabase/MapTiler, atualize os
+valores em `eas.json` **e** no `.env` local.
 
-(`EXPO_PUBLIC_*` são embutidas no app — a anon key do Supabase é pública por
-design; a segurança vem do RLS.)
+**Rede de segurança:** o hook `eas-build-pre-install` roda
+`scripts/check-env.js` e **aborta o build** se `EXPO_PUBLIC_SUPABASE_URL`/
+`ANON_KEY` estiverem ausentes ou a URL não for `https://` — impossível
+publicar um AAB sem configuração de novo. Rode `npm run check-env` localmente
+para conferir antes de buildar.
 
 ## 2. Gerar o AAB de produção
 
